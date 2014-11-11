@@ -35,7 +35,11 @@ let testHost =
             [
                 r.Project(main)
                 r.Project(testSitelet)
-                r.NuGet("WebSharper").Reference()
+                r.NuGet("WebSharper").At(
+                    [
+                        "tools/net40/IntelliFactory.WebSharper.Sitelets.dll"
+                        "tools/net40/IntelliFactory.WebSharper.Core.dll"
+                    ]).Reference()
                 r.NuGet("Microsoft.Owin").Reference()
                 r.NuGet("Microsoft.Owin.Diagnostics").Reference()
                 r.NuGet("Microsoft.Owin.FileSystems").Reference()

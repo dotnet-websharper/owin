@@ -65,6 +65,9 @@ bt.Solution [
                 Description = "WebSharper Sitelets module for Owin 1.0"
                 RequiresLicenseAcceptance = true })
         .Add(main)
+        .AddFile(
+            "HttpMultipartParser/bin/Release/HttpMultipartParser.dll",
+            "lib/net45/HttpMultipartParser.dll")
 
 ]
 |> bt.Dispatch

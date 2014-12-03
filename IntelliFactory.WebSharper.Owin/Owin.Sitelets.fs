@@ -279,10 +279,15 @@ module private Internal =
 
 type Options with
 
-    static member Create webRoot =
-        let meta = M.Info.LoadFromWebRoot(webRoot)
+    static member Create(webRoot, ?binDirectory) =
+        let binDirectory = defaultArg binDirectory (Path.Combine(webRoot, "bin"))
+        let meta = M.Info.LoadFromBinDirectory(binDirectory)
         Options.Create(meta)
             .WithServerRootDirectory(webRoot)
+
+    member o.WithBinDirectory(dir) =
+        let meta = M.Info.LoadFromBinDirectory dir
+        { o with Metadata = meta }
 
 [<AutoOpen>]
 module Extensions =
@@ -325,8 +330,12 @@ module Extensions =
             let meta = M.Info.LoadFromWebRoot(webRoot)
             this.UseWebSharperRemoting(meta)
 
-        member this.UseSitelet(webRoot: string, sitelet) =
-            this.UseCustomSitelet(Options.Create(webRoot), sitelet)
+        member this.UseWebSharperRemotingFromBin(binDirectory: string) =
+            let meta = M.Info.LoadFromBinDirectory(binDirectory)
+            this.UseWebSharperRemoting(meta)
+
+        member this.UseSitelet(webRoot: string, sitelet, ?binDirectory) =
+            this.UseCustomSitelet(Options.Create(webRoot, ?binDirectory = binDirectory), sitelet)
 
         member this.UseCustomSitelet(config: Options, sitelet: Sitelet<'T>) =
             let cb = ContextBuilder(config)
@@ -338,8 +347,9 @@ module Extensions =
                     | Some t -> t
                     | None -> next.Invoke())
 
-        member this.UseDiscoveredSitelet(webRoot: string) =
-            let binDir = DirectoryInfo(Path.Combine(webRoot, "bin"))
+        member this.UseDiscoveredSitelet(webRoot: string, ?binDirectory) =
+            let binDirectory = defaultArg binDirectory (Path.Combine(webRoot, "bin"))
+            let binDir = DirectoryInfo(binDirectory)
             let ok =
                 binDir.DiscoverAssemblies()
                 |> Seq.tryPick (fun assem ->

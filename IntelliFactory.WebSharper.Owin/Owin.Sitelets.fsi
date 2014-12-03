@@ -12,9 +12,10 @@ type Options =
     /// Creates sitelet server options with the given WebSharper metadata.
     static member Create : M.Info -> Options
 
-    /// Creates sitelet server options from WebSharper metadata loaded from
-    /// assemblies in the "bin" subfolder of webRoot.
-    static member Create : webRoot: string -> Options
+    /// Creates sitelet server options using webRoot as the root folder and
+    /// loading WebSharper metadata from assemblies in binDirectory.
+    /// If binDirectory is not specified, webRoot/bin is used.
+    static member Create : webRoot: string * ?binDirectory: string -> Options
 
     /// Enables debugging (including using uncompressed JavaScript files).
     member WithDebug : unit -> Options
@@ -39,15 +40,15 @@ module Extensions =
     open IntelliFactory.WebSharper.Sitelets
 
     type IAppBuilder with
-        /// Inspects the webRoot folder, looking for an assembly in the "bin"
-        /// subfolder that contains a WebSharper Sitelet, and runs this Sitelet
-        /// with webRoot as the root folder.
-        member UseDiscoveredSitelet : webRoot: string -> IAppBuilder
+        /// Inspects the binDirectory folder, looking for an assembly that contains
+        /// a WebSharper Sitelet, and runs this Sitelet with webRoot as the root folder.
+        /// If binDirectory is not specified, webRoot/bin is used.
+        member UseDiscoveredSitelet : webRoot: string * ?binDirectory: string -> IAppBuilder
 
         /// Runs the provided Sitelet with webRoot as the root folder, using
-        /// WebSharper metadata loaded from assemblies located in the "bin"
-        /// subfolder of webRoot.
-        member UseSitelet : webRoot: string * Sitelet<'T> -> IAppBuilder
+        /// WebSharper metadata loaded from assemblies located in binDirectory.
+        /// If binDirectory is not specified, webRoot/bin is used.
+        member UseSitelet : webRoot: string * Sitelet<'T> * ?binDirectory: string -> IAppBuilder
 
         /// Runs the provided Sitelet. Allows a more customized setup than the
         /// previous methods, for example running a Sitelet whose code isn't
@@ -60,11 +61,20 @@ module Extensions =
         /// Note that the Remoting service is automatically run by the above
         /// methods UseDiscoveredSitelet and UseSitelet, as well as
         /// UseCustomSitelet if options.RunRemoting is set to true.
+        /// WebSharper metadata is loaded from webRoot/bin.
         member UseWebSharperRemoting : webRoot: string -> IAppBuilder
 
         /// Runs the WebSharper Remoting service, allowing WebSharper-compiled
         /// client-side code to invoke [<Rpc>]-annotated server-side functions.
-        /// Note that the Remoting service is automatically run by the above
+        /// Note that the Remoting service is automatically run by the
+        /// methods UseDiscoveredSitelet and UseSitelet, as well as
+        /// UseCustomSitelet if options.RunRemoting is set to true.
+        /// WebSharper metadata is loaded from binDirectory.
+        member UseWebSharperRemotingFromBin : binDirectory: string -> IAppBuilder
+
+        /// Runs the WebSharper Remoting service, allowing WebSharper-compiled
+        /// client-side code to invoke [<Rpc>]-annotated server-side functions.
+        /// Note that the Remoting service is automatically run by the
         /// methods UseDiscoveredSitelet and UseSitelet, as well as
         /// UseCustomSitelet if options.RunRemoting is set to true.
         member UseWebSharperRemoting : M.Info -> IAppBuilder

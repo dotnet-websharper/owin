@@ -352,8 +352,11 @@ module Extensions =
             let binDir = DirectoryInfo(binDirectory)
             let ok =
                 binDir.DiscoverAssemblies()
+                |> Seq.choose (fun p ->
+                    try Some (Assembly.LoadFileInfo(p))
+                    with e -> None)
+                |> Array.ofSeq
                 |> Seq.tryPick (fun assem ->
-                    let assem = Assembly.LoadFileInfo(assem)
                     let aT = typeof<WebsiteAttribute>
                     match Attribute.GetCustomAttribute(assem, aT) with
                     | :? WebsiteAttribute as attr ->

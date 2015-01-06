@@ -9,7 +9,8 @@ module Rpc =
 
 module Client =
 
-    open IntelliFactory.WebSharper.Html
+    open IntelliFactory.WebSharper.Html.Client
+    open IntelliFactory.WebSharper.JavaScript
 
     [<JavaScript>]
     let test = 42
@@ -37,7 +38,7 @@ module Client =
 module Server =
 
     open IntelliFactory.WebSharper.Sitelets
-    open IntelliFactory.Html
+    open IntelliFactory.WebSharper.Html.Server
 
     type Action =
         | Index

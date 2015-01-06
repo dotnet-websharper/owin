@@ -37,8 +37,8 @@ let testHost =
                 r.Project(testSitelet)
                 r.NuGet("WebSharper").At(
                     [
-                        "tools/net40/IntelliFactory.WebSharper.Sitelets.dll"
-                        "tools/net40/IntelliFactory.WebSharper.Core.dll"
+                        "lib/net40/IntelliFactory.WebSharper.Sitelets.dll"
+                        "lib/net40/IntelliFactory.WebSharper.Core.dll"
                     ]).Reference()
                 r.NuGet("Microsoft.Owin").Reference()
                 r.NuGet("Microsoft.Owin.Diagnostics").Reference()

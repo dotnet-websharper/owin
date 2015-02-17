@@ -7,6 +7,22 @@ module Rpc =
     [<Rpc>]
     let GetValue() = async { return "Server-side value" }
 
+    [<Rpc>]
+    let Logout() =
+        let userSession = Web.Remoting.GetUserSession()
+        async {
+            do! userSession.Logout()
+            return ()
+        }
+
+    [<Rpc>]
+    let LoginAs username =
+        let userSession = Web.Remoting.GetUserSession()
+        async {
+            do! userSession.LoginUser username
+            return ()
+        }
+
 module Client =
 
     open IntelliFactory.WebSharper.Html.Client
@@ -35,6 +51,39 @@ module Client =
                 ]
             ] :> _
 
+    type LogoutControl(loggedInAs) =
+        inherit Web.Control()
+
+        [<JavaScript>]
+        override this.Body =
+            Div [
+                Span [Text ("Logged in as " + loggedInAs)]
+                Button [Text "Log out"]
+                |>! OnClick (fun _ _ ->
+                    async {
+                        do! Rpc.Logout()
+                        return JS.Window.Location.Reload()
+                    } |> Async.Start)
+            ]
+            :> _
+
+    type LoginControl() =
+        inherit Web.Control()
+
+        [<JavaScript>]
+        override this.Body =
+            let input = Input []
+            Div [
+                input
+                Button [Text "Log in"]
+                |>! OnClick (fun _ _ ->
+                    async {
+                        do! Rpc.LoginAs input.Value
+                        return JS.Window.Location.Reload()
+                    } |> Async.Start)
+            ]
+            :> _
+
 module Server =
 
     open IntelliFactory.WebSharper.Sitelets
@@ -45,11 +94,22 @@ module Server =
         | Article of articleId: int
         | Upload
 
+    let Header (ctx: Context<_>) =
+        async {
+            let! loggedIn = ctx.UserSession.GetLoggedInUser()
+            match loggedIn with
+            | Some u -> return Div [new Client.LogoutControl(u)]
+            | None -> return Div [new Client.LoginControl()]
+        }
+
     let IndexPage =
-        Content.PageContent <| fun ctx ->
-            { Page.Default with
+        Content.PageContentAsync <| fun ctx -> async {
+            let! header = Header ctx
+            return {
+              Page.Default with
                 Body =
                     [
+                        header
                         H1 [Text "Welcome to my site!"]
                         UL [
                             LI [A [HRef (ctx.Link (Article 1))] -< [Text "Article 1"]]
@@ -71,6 +131,7 @@ module Server =
                             Div [Input [Type "submit"]]
                         ]
                     ] }
+        }
 
     let ArticlePage articleId =
         Content.PageContent <| fun ctx ->

@@ -3,12 +3,15 @@
 open System
 open System.IO
 open System.Configuration
+open System.Security.Principal
 open System.Threading.Tasks
 open System.Web
+open System.Web.Security
 open global.Owin
 open Microsoft.Owin
 open IntelliFactory.WebSharper
 open IntelliFactory.WebSharper.Sitelets
+open IntelliFactory.WebSharper.Web
 module Res = IntelliFactory.WebSharper.Core.Resources
 module P = IntelliFactory.WebSharper.PathConventions
 module M = IntelliFactory.WebSharper.Core.Metadata
@@ -181,6 +184,59 @@ module private Internal =
                 |> Res.RenderLink
         }
 
+    type OwinCookieUserSession(ctx: IOwinContext) =
+
+        let refresh (cookie: string) =
+            match cookie with
+            | null -> ctx.Authentication.User <- null
+            | cookie ->
+                let ticket = FormsAuthentication.Decrypt cookie
+                let principal = GenericPrincipal(FormsIdentity(ticket), [||])
+                ctx.Authentication.User <- principal
+
+        do refresh ctx.Request.Cookies.[FormsAuthentication.FormsCookieName]
+
+        interface IUserSession with
+
+            member this.IsAvailable = true
+
+            member this.GetLoggedInUser() =
+                async {
+                    match ctx.Authentication.User with
+                    | null -> return None
+                    | x ->
+                        if x.Identity.IsAuthenticated then
+                            return Some x.Identity.Name
+                        else return None
+                }
+
+            member this.LoginUser(user, ?persistent) =
+                async {
+                    let persistent = defaultArg persistent false
+                    let cookie = FormsAuthentication.GetAuthCookie(user, persistent)
+                    let expires =
+                        if persistent then
+                            System.Nullable(cookie.Expires)
+                        else System.Nullable()
+                    ctx.Response.Cookies.Append(cookie.Name, cookie.Value,
+                        CookieOptions(
+                            Domain = cookie.Domain,
+                            Expires = expires,
+                            HttpOnly = cookie.HttpOnly,
+                            Path = cookie.Path,
+                            Secure = cookie.Secure))
+                    return refresh cookie.Value
+                }
+
+            member this.Logout() =
+                async {
+                    ctx.Response.Cookies.Append(FormsAuthentication.FormsCookieName, "",
+                        CookieOptions(Expires = System.Nullable(DateTime.Now.AddDays(-1.))))
+                    return refresh null
+                }
+
+    let LocalOwinContext = new System.Threading.ThreadLocal<IOwinContext ref>(fun () -> ref null)
+
     [<Sealed>]
     type ContextBuilder(cfg) =
         let info = cfg.Metadata
@@ -229,6 +285,7 @@ module private Internal =
                 ResourceContext = resContext context
                 Request = req
                 RootFolder = cfg.ServerRootDirectory
+                UserSession = OwinCookieUserSession(context)
             }
 
     let dispatch (cb: ContextBuilder) (s: Sitelet<'T>) (context: IOwinContext) : option<Task> =
@@ -296,6 +353,8 @@ module Extensions =
     type IAppBuilder with
 
         member this.UseWebSharperRemoting(meta: M.Info) =
+            Remoting.SetUserSession(fun () ->
+                new OwinCookieUserSession(!LocalOwinContext.Value) :> _)
             let serv = Rem.Server.Create None meta
             this.Use(fun context next ->
                 let headers =
@@ -310,6 +369,7 @@ module Extensions =
                             use reader = new StreamReader(context.Request.Body)
                             let! body = reader.ReadToEndAsync() |> Async.AwaitTask
                             let! resp =
+                                LocalOwinContext.Value := context
                                 serv.HandleRequest {
                                     Body = body
                                     Headers = getHeader

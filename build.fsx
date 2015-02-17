@@ -7,13 +7,18 @@ let bt =
 let multipartParser =
     bt.MSBuild("HttpMultipartParser/HttpMultipartParser.csproj")
         .Configuration("Release")
+        .GeneratedAssemblyFiles(
+            [
+                "HttpMultipartParser/bin/Release/HttpMultipartParser.dll"
+            ]
+        )
 
 let main =
     bt.WebSharper.Library("IntelliFactory.WebSharper.Owin")
         .SourcesFromProject()
         .References(fun r ->
             [
-                r.File("HttpMultipartParser/bin/Release/HttpMultipartParser.dll")
+                r.Project(multipartParser)
                 r.NuGet("Owin").Reference()
                 r.NuGet("Microsoft.Owin").Reference()
                 r.Assembly("System.Configuration")
@@ -25,6 +30,7 @@ let testSitelet =
         .SourcesFromProject()
         .References(fun r ->
             [
+                r.Project(multipartParser)
                 r.Project(main)
             ])
 
@@ -33,6 +39,7 @@ let testHost =
         .SourcesFromProject()
         .References(fun r ->
             [
+                r.Project(multipartParser)
                 r.Project(main)
                 r.Project(testSitelet)
                 r.NuGet("WebSharper").At(

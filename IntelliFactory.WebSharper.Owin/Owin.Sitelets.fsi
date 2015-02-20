@@ -50,19 +50,8 @@ module Extensions =
         /// If binDirectory is not specified, webRoot/bin is used.
         member UseSitelet : webRoot: string * Sitelet<'T> * ?binDirectory: string -> IAppBuilder
 
-        /// Runs the provided Sitelet. Allows a more customized setup than the
-        /// previous methods, for example running a Sitelet whose code isn't
-        /// located in the "bin" subfolder of the root folder, or running the
-        /// Sitelet with a URL prefix.
+        /// Runs the provided Sitelet with the provided options.
         member UseCustomSitelet : Options * Sitelet<'T> -> IAppBuilder
-
-        /// Runs the WebSharper Remoting service, allowing WebSharper-compiled
-        /// client-side code to invoke [<Rpc>]-annotated server-side functions.
-        /// Note that the Remoting service is automatically run by the above
-        /// methods UseDiscoveredSitelet and UseSitelet, as well as
-        /// UseCustomSitelet if options.RunRemoting is set to true.
-        /// WebSharper metadata is loaded from webRoot/bin.
-        member UseWebSharperRemoting : webRoot: string -> IAppBuilder
 
         /// Runs the WebSharper Remoting service, allowing WebSharper-compiled
         /// client-side code to invoke [<Rpc>]-annotated server-side functions.
@@ -70,6 +59,16 @@ module Extensions =
         /// methods UseDiscoveredSitelet and UseSitelet, as well as
         /// UseCustomSitelet if options.RunRemoting is set to true.
         /// WebSharper metadata is loaded from binDirectory.
+        /// If binDirectory is not specified, webRoot/bin.
+        member UseWebSharperRemoting : webRoot: string * ?binDirectory: string -> IAppBuilder
+
+        /// Runs the WebSharper Remoting service, allowing WebSharper-compiled
+        /// client-side code to invoke [<Rpc>]-annotated server-side functions.
+        /// Note that the Remoting service is automatically run by the
+        /// methods UseDiscoveredSitelet and UseSitelet, as well as
+        /// UseCustomSitelet if options.RunRemoting is set to true.
+        /// WebSharper metadata is loaded from binDirectory.
+        [<System.Obsolete "Use UseWebSharperRemoting(webRoot, binDirectory).">]
         member UseWebSharperRemotingFromBin : binDirectory: string -> IAppBuilder
 
         /// Runs the WebSharper Remoting service, allowing WebSharper-compiled
@@ -77,4 +76,12 @@ module Extensions =
         /// Note that the Remoting service is automatically run by the
         /// methods UseDiscoveredSitelet and UseSitelet, as well as
         /// UseCustomSitelet if options.RunRemoting is set to true.
+        [<System.Obsolete "Use UseWebSharperRemoting(webRoot, info).">]
         member UseWebSharperRemoting : M.Info -> IAppBuilder
+
+        /// Runs the WebSharper Remoting service, allowing WebSharper-compiled
+        /// client-side code to invoke [<Rpc>]-annotated server-side functions.
+        /// Note that the Remoting service is automatically run by the
+        /// methods UseDiscoveredSitelet and UseSitelet, as well as
+        /// UseCustomSitelet if options.RunRemoting is set to true.
+        member UseWebSharperRemoting : webRoot: string * M.Info -> IAppBuilder

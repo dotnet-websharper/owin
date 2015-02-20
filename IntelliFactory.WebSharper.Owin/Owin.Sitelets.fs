@@ -352,9 +352,17 @@ module Extensions =
 
     type IAppBuilder with
 
-        member this.UseWebSharperRemoting(meta: M.Info) =
-            Remoting.SetUserSession(fun () ->
-                new OwinCookieUserSession(!LocalOwinContext.Value) :> _)
+        member this.UseWebSharperRemoting(webRoot: string, meta: M.Info) =
+            Remoting.SetContext(fun () ->
+                let owinCtx = !LocalOwinContext.Value
+                let session = new OwinCookieUserSession(owinCtx)
+                let uri = owinCtx.Request.Uri
+                Some {
+                    new Web.IContext with
+                        member this.UserSession = session :> _
+                        member this.RequestUri = uri
+                        member this.RootFolder = webRoot
+                })
             let serv = Rem.Server.Create None meta
             this.Use(fun context next ->
                 let headers =
@@ -386,13 +394,18 @@ module Extensions =
                     :> Task
                 else next.Invoke())
 
-        member this.UseWebSharperRemoting(webRoot: string) =
-            let meta = M.Info.LoadFromWebRoot(webRoot)
-            this.UseWebSharperRemoting(meta)
+        member this.UseWebSharperRemoting(meta: M.Info) =
+            this.UseWebSharperRemoting(System.IO.Directory.GetCurrentDirectory(), meta)
+
+        member this.UseWebSharperRemoting(webRoot: string, ?binDirectory: string) =
+            let meta =
+                match binDirectory with
+                | None -> M.Info.LoadFromWebRoot(webRoot)
+                | Some binDirectory -> M.Info.LoadFromBinDirectory(binDirectory)
+            this.UseWebSharperRemoting(webRoot, meta)
 
         member this.UseWebSharperRemotingFromBin(binDirectory: string) =
-            let meta = M.Info.LoadFromBinDirectory(binDirectory)
-            this.UseWebSharperRemoting(meta)
+            this.UseWebSharperRemoting(binDirectory, binDirectory)
 
         member this.UseSitelet(webRoot: string, sitelet, ?binDirectory) =
             this.UseCustomSitelet(Options.Create(webRoot, ?binDirectory = binDirectory), sitelet)

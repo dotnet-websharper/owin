@@ -53,5 +53,5 @@
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
   </ItemGroup>
-  <Import Project="../build/net45/IntelliFactory.WebSharper.Owin.Tests.SelfHost.proj" />
+  <Import Project="../build/net45/$(Name).proj" />
 </Project>

@@ -9,17 +9,17 @@ module Rpc =
 
     [<Rpc>]
     let Logout() =
-        let userSession = Web.Remoting.GetUserSession()
+        let ctx = Web.Remoting.GetContext()
         async {
-            do! userSession.Logout()
+            do! ctx.UserSession.Logout()
             return ()
         }
 
     [<Rpc>]
     let LoginAs username =
-        let userSession = Web.Remoting.GetUserSession()
+        let ctx = Web.Remoting.GetContext()
         async {
-            do! userSession.LoginUser username
+            do! ctx.UserSession.LoginUser username
             return ()
         }
 

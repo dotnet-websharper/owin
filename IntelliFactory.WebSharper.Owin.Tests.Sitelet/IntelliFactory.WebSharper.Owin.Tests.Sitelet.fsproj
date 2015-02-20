@@ -49,5 +49,5 @@
   <ItemGroup>
     <Compile Include="WebApplication.fs" />
   </ItemGroup>
-  <Import Project="bin/IntelliFactory.WebSharper.Owin.Tests.Sitelet.proj" />
+  <Import Project="bin/$(Name).proj" />
 </Project>

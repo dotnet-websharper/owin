@@ -1,8 +1,8 @@
-module IntelliFactory.WebSharper.Owin.Tests.SelfHost
+module WebSharper.Owin.Tests.SelfHost
 
 open System
 open System.IO
-open IntelliFactory.WebSharper
+open WebSharper
 
 module SelfHostedServer =
 
@@ -10,8 +10,8 @@ module SelfHostedServer =
     open Microsoft.Owin.Hosting
     open Microsoft.Owin.StaticFiles
     open Microsoft.Owin.FileSystems
-    open IntelliFactory.WebSharper.Owin
-    open IntelliFactory.WebSharper.Owin.Tests.Sitelet
+    open WebSharper.Owin
+    open WebSharper.Owin.Tests.Sitelet
 
     [<EntryPoint>]
     let Main args =

@@ -1,7 +1,7 @@
-﻿namespace IntelliFactory.WebSharper.Owin
+﻿namespace WebSharper.Owin
 
-open IntelliFactory.WebSharper
-module M = IntelliFactory.WebSharper.Core.Metadata
+open WebSharper
+module M = WebSharper.Core.Metadata
 
 /// Options to initialize a sitelet server with IAppBuilder.UseCustomSitelet.
 [<Sealed>]
@@ -37,7 +37,7 @@ type Options =
 module Extensions =
 
     open global.Owin
-    open IntelliFactory.WebSharper.Sitelets
+    open WebSharper.Sitelets
 
     type IAppBuilder with
         /// Inspects the binDirectory folder, looking for an assembly that contains

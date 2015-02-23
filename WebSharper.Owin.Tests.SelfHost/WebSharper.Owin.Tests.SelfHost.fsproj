@@ -27,7 +27,7 @@
   </PropertyGroup>
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <Name>IntelliFactory.WebSharper.Owin.Tests.SelfHost</Name>
+    <Name>WebSharper.Owin.Tests.SelfHost</Name>
     <RootNamespace>$(Name)</RootNamespace>
     <AssemblyName>$(Name)</AssemblyName>
     <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>

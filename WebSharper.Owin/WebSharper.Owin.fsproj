@@ -4,29 +4,28 @@
     <Configuration Condition="'$(Configuration)' == ''">Debug</Configuration>
     <Platform Condition="'$(Platform)' == ''">AnyCPU</Platform>
     <SchemaVersion>2.0</SchemaVersion>
-    <ProjectGuid>{a87e95fd-b88c-4336-8073-1cf0f9b1fb32}</ProjectGuid>
+    <ProjectGuid>{c9174ec8-679e-43fa-84c7-b5a633056fe4}</ProjectGuid>
     <WebSharperProject>Library</WebSharperProject>
-    <NuGetPackageImportStamp>4614a202</NuGetPackageImportStamp>
-    <TargetFrameworkProfile />
+    <NuGetPackageImportStamp>2c422e46</NuGetPackageImportStamp>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
     <Tailcalls>false</Tailcalls>
-    <OutputPath>bin/Debug</OutputPath>
+    <OutputPath>../build/net45</OutputPath>
     <DefineConstants>DEBUG;TRACE</DefineConstants>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
     <DebugType>pdbonly</DebugType>
     <Optimize>true</Optimize>
     <Tailcalls>true</Tailcalls>
-    <OutputPath>bin/Release</OutputPath>
+    <OutputPath>../build/net45</OutputPath>
     <DefineConstants>TRACE</DefineConstants>
   </PropertyGroup>
   <PropertyGroup>
     <OutputType>Library</OutputType>
-    <Name>IntelliFactory.WebSharper.Owin.Tests.Sitelet</Name>
+    <Name>WebSharper.Owin</Name>
     <RootNamespace>$(Name)</RootNamespace>
     <AssemblyName>$(Name)</AssemblyName>
     <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
@@ -47,7 +46,8 @@
   </Choose>
   <Import Project="$(FSharpTargetsPath)" />
   <ItemGroup>
-    <Compile Include="WebApplication.fs" />
+    <Compile Include="Owin.Sitelets.fsi" />
+    <Compile Include="Owin.Sitelets.fs" />
   </ItemGroup>
-  <Import Project="bin/$(Name).proj" />
+  <Import Project="../build/net45/$(Name).proj" />
 </Project>

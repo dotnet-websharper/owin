@@ -1,6 +1,6 @@
-namespace IntelliFactory.WebSharper.Owin.Tests.Sitelet
+namespace WebSharper.Owin.Tests.Sitelet
 
-open IntelliFactory.WebSharper
+open WebSharper
 
 module Rpc =
 
@@ -25,8 +25,8 @@ module Rpc =
 
 module Client =
 
-    open IntelliFactory.WebSharper.Html.Client
-    open IntelliFactory.WebSharper.JavaScript
+    open WebSharper.Html.Client
+    open WebSharper.JavaScript
 
     [<JavaScript>]
     let test = 42
@@ -86,8 +86,8 @@ module Client =
 
 module Server =
 
-    open IntelliFactory.WebSharper.Sitelets
-    open IntelliFactory.WebSharper.Html.Server
+    open WebSharper.Sitelets
+    open WebSharper.Html.Server
 
     type Action =
         | Index

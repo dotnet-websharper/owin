@@ -3,13 +3,13 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 2013
 VisualStudioVersion = 12.0.30501.0
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "IntelliFactory.WebSharper.Owin", "IntelliFactory.WebSharper.Owin\IntelliFactory.WebSharper.Owin.fsproj", "{C9174EC8-679E-43FA-84C7-B5A633056FE4}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "WebSharper.Owin", "WebSharper.Owin\WebSharper.Owin.fsproj", "{C9174EC8-679E-43FA-84C7-B5A633056FE4}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HttpMultipartParser", "HttpMultipartParser\HttpMultipartParser.csproj", "{4691988A-CE66-40CB-AFB4-2757255E03E0}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "IntelliFactory.WebSharper.Owin.Tests.SelfHost", "IntelliFactory.WebSharper.Owin.Tests.SelfHost\IntelliFactory.WebSharper.Owin.Tests.SelfHost.fsproj", "{BFD48142-7821-44CA-91DF-9A26FBB8D5DF}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "WebSharper.Owin.Tests.SelfHost", "WebSharper.Owin.Tests.SelfHost\WebSharper.Owin.Tests.SelfHost.fsproj", "{BFD48142-7821-44CA-91DF-9A26FBB8D5DF}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "IntelliFactory.WebSharper.Owin.Tests.Sitelet", "IntelliFactory.WebSharper.Owin.Tests.Sitelet\IntelliFactory.WebSharper.Owin.Tests.Sitelet.fsproj", "{A87E95FD-B88C-4336-8073-1CF0F9B1FB32}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "WebSharper.Owin.Tests.Sitelet", "WebSharper.Owin.Tests.Sitelet\WebSharper.Owin.Tests.Sitelet.fsproj", "{A87E95FD-B88C-4336-8073-1CF0F9B1FB32}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{27217AE2-7C89-4173-BA18-691361111A97}"
 	ProjectSection(SolutionItems) = preProject

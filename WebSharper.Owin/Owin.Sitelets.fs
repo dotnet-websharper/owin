@@ -1,4 +1,4 @@
-﻿namespace IntelliFactory.WebSharper.Owin
+﻿namespace WebSharper.Owin
 
 open System
 open System.IO
@@ -9,12 +9,12 @@ open System.Web
 open System.Web.Security
 open global.Owin
 open Microsoft.Owin
-open IntelliFactory.WebSharper
-open IntelliFactory.WebSharper.Sitelets
-open IntelliFactory.WebSharper.Web
-module Res = IntelliFactory.WebSharper.Core.Resources
-module P = IntelliFactory.WebSharper.PathConventions
-module M = IntelliFactory.WebSharper.Core.Metadata
+open WebSharper
+open WebSharper.Sitelets
+open WebSharper.Web
+module Res = WebSharper.Core.Resources
+module P = WebSharper.PathConventions
+module M = WebSharper.Core.Metadata
 
 type Options =
     private {
@@ -348,7 +348,7 @@ type Options with
 
 [<AutoOpen>]
 module Extensions =
-    module Rem = IntelliFactory.WebSharper.Core.Remoting
+    module Rem = WebSharper.Core.Remoting
 
     type IAppBuilder with
 

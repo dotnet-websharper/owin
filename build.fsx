@@ -14,7 +14,7 @@ let multipartParser =
         )
 
 let main =
-    bt.WebSharper.Library("IntelliFactory.WebSharper.Owin")
+    bt.WebSharper.Library("WebSharper.Owin")
         .SourcesFromProject()
         .References(fun r ->
             [
@@ -26,7 +26,7 @@ let main =
             ])
 
 let testSitelet =
-    bt.WebSharper.SiteletWebsite("IntelliFactory.WebSharper.Owin.Tests.Sitelet")
+    bt.WebSharper.SiteletWebsite("WebSharper.Owin.Tests.Sitelet")
         .SourcesFromProject()
         .References(fun r ->
             [
@@ -35,7 +35,7 @@ let testSitelet =
             ])
 
 let testHost =
-    bt.FSharp.ConsoleExecutable("IntelliFactory.WebSharper.Owin.Tests.SelfHost")
+    bt.FSharp.ConsoleExecutable("WebSharper.Owin.Tests.SelfHost")
         .SourcesFromProject()
         .References(fun r ->
             [
@@ -44,8 +44,8 @@ let testHost =
                 r.Project(testSitelet)
                 r.NuGet("WebSharper").At(
                     [
-                        "lib/net40/IntelliFactory.WebSharper.Sitelets.dll"
-                        "lib/net40/IntelliFactory.WebSharper.Core.dll"
+                        "lib/net40/WebSharper.Sitelets.dll"
+                        "lib/net40/WebSharper.Core.dll"
                     ]).Reference()
                 r.NuGet("Microsoft.Owin").Reference()
                 r.NuGet("Microsoft.Owin.Diagnostics").Reference()

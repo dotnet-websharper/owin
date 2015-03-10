@@ -42,11 +42,7 @@ let testHost =
                 r.Project(multipartParser)
                 r.Project(main)
                 r.Project(testSitelet)
-                r.NuGet("WebSharper").At(
-                    [
-                        "lib/net40/WebSharper.Sitelets.dll"
-                        "lib/net40/WebSharper.Core.dll"
-                    ]).Reference()
+                r.NuGet("WebSharper").Reference()
                 r.NuGet("Microsoft.Owin").Reference()
                 r.NuGet("Microsoft.Owin.Diagnostics").Reference()
                 r.NuGet("Microsoft.Owin.FileSystems").Reference()

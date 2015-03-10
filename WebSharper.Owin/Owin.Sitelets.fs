@@ -1,6 +1,7 @@
 ﻿namespace WebSharper.Owin
 
 open System
+open System.Collections.Generic
 open System.IO
 open System.Configuration
 open System.Security.Principal
@@ -12,9 +13,14 @@ open Microsoft.Owin
 open WebSharper
 open WebSharper.Sitelets
 open WebSharper.Web
+module Rem = WebSharper.Core.Remoting
 module Res = WebSharper.Core.Resources
 module P = WebSharper.PathConventions
 module M = WebSharper.Core.Metadata
+
+type Env = IDictionary<string, obj>
+type AppFunc = Func<Env, Task>
+type MidFunc = Func<AppFunc, AppFunc>
 
 type Options =
     private {
@@ -349,53 +355,73 @@ type Options with
         let meta = M.Info.LoadFromBinDirectory dir
         { o with Metadata = meta }
 
+type WebSharperRemotingMiddleware(next: AppFunc, webRoot: string, meta: M.Info) =
+    do Remoting.SetContext(fun () ->
+        let owinCtx = !LocalOwinContext.Value
+        let session = new OwinCookieUserSession(owinCtx)
+        let uri = owinCtx.Request.Uri
+        Some {
+            new Web.IContext with
+                member this.UserSession = session :> _
+                member this.RequestUri = uri
+                member this.RootFolder = webRoot
+        })
+    let serv = Rem.Server.Create None meta
+
+    member this.Invoke(env: Env) =
+        let context = OwinContext(env) :> IOwinContext
+        let headers =
+            O2W.Headers context.Request.Headers
+            |> Seq.map (fun h -> (h.Name, h.Value))
+            |> Map.ofSeq
+        let getHeader k =
+            Map.tryFind k headers
+        if Rem.IsRemotingRequest getHeader then
+            async {
+                try
+                    use reader = new StreamReader(context.Request.Body)
+                    let! body = reader.ReadToEndAsync() |> Async.AwaitTask
+                    let! resp =
+                        LocalOwinContext.Value := context
+                        serv.HandleRequest {
+                            Body = body
+                            Headers = getHeader
+                        }
+                    context.Response.StatusCode <- 200
+                    context.Response.ContentType <- resp.ContentType
+                    context.Response.Write(resp.Content)
+                with e ->
+                    context.Response.StatusCode <- 500
+                    context.Response.Write(sprintf "%A" e)
+                return ()
+            }
+            |> Async.StartAsTask
+            :> Task
+        else next.Invoke(env)
+
+    static member AsMidFunc(webRoot: string, meta: M.Info) =
+        MidFunc(fun next ->
+            AppFunc (WebSharperRemotingMiddleware(next, webRoot, meta).Invoke))
+
+type SiteletMiddleware<'T when 'T : equality>(next: AppFunc, config: Options, sitelet: Sitelet<'T>) =
+    let cb = ContextBuilder(config)
+
+    member this.Invoke(env: Env) =
+        let context = OwinContext(env) :> IOwinContext
+        match dispatch cb sitelet context with
+        | Some t -> t
+        | None -> next.Invoke(env)
+
+    static member AsMidFunc(config: Options, sitelet: Sitelet<'T>) =
+        MidFunc(fun next ->
+            AppFunc (SiteletMiddleware(next, config, sitelet).Invoke))
+
 [<AutoOpen>]
 module Extensions =
-    module Rem = WebSharper.Core.Remoting
-
     type IAppBuilder with
 
         member this.UseWebSharperRemoting(webRoot: string, meta: M.Info) =
-            Remoting.SetContext(fun () ->
-                let owinCtx = !LocalOwinContext.Value
-                let session = new OwinCookieUserSession(owinCtx)
-                let uri = owinCtx.Request.Uri
-                Some {
-                    new Web.IContext with
-                        member this.UserSession = session :> _
-                        member this.RequestUri = uri
-                        member this.RootFolder = webRoot
-                })
-            let serv = Rem.Server.Create None meta
-            this.Use(fun context next ->
-                let headers =
-                    O2W.Headers context.Request.Headers
-                    |> Seq.map (fun h -> (h.Name, h.Value))
-                    |> Map.ofSeq
-                let getHeader k =
-                    Map.tryFind k headers
-                if Rem.IsRemotingRequest getHeader then
-                    async {
-                        try
-                            use reader = new StreamReader(context.Request.Body)
-                            let! body = reader.ReadToEndAsync() |> Async.AwaitTask
-                            let! resp =
-                                LocalOwinContext.Value := context
-                                serv.HandleRequest {
-                                    Body = body
-                                    Headers = getHeader
-                                }
-                            context.Response.StatusCode <- 200
-                            context.Response.ContentType <- resp.ContentType
-                            context.Response.Write(resp.Content)
-                        with e ->
-                            context.Response.StatusCode <- 500
-                            context.Response.Write(sprintf "%A" e)
-                        return ()
-                    }
-                    |> Async.StartAsTask
-                    :> Task
-                else next.Invoke())
+            this.Use(WebSharperRemotingMiddleware.AsMidFunc(webRoot, meta))
 
         member this.UseWebSharperRemoting(meta: M.Info) =
             this.UseWebSharperRemoting(System.IO.Directory.GetCurrentDirectory(), meta)
@@ -414,14 +440,10 @@ module Extensions =
             this.UseCustomSitelet(Options.Create(webRoot, ?binDirectory = binDirectory), sitelet)
 
         member this.UseCustomSitelet(config: Options, sitelet: Sitelet<'T>) =
-            let cb = ContextBuilder(config)
             (if config.RunRemoting then
                 this.UseWebSharperRemoting(config.Metadata)
             else this)
-                .Use(fun context next ->
-                    match dispatch cb sitelet context with
-                    | Some t -> t
-                    | None -> next.Invoke())
+                .Use(SiteletMiddleware.AsMidFunc(config, sitelet))
 
         member this.UseDiscoveredSitelet(webRoot: string, ?binDirectory) =
             let binDirectory = defaultArg binDirectory (Path.Combine(webRoot, "bin"))

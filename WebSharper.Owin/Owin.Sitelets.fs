@@ -430,11 +430,19 @@ type RemotingMiddleware(next: AppFunc, webRoot: string, meta: M.Info) =
 type SiteletMiddleware<'T when 'T : equality>(next: AppFunc, config: Options, sitelet: Sitelet<'T>) =
     let cb = ContextBuilder(config)
 
+    let appFunc =
+        let siteletAppFunc = AppFunc(fun env ->
+            let context = OwinContext(env) :> IOwinContext
+            match dispatch cb sitelet context with
+            | Some t -> t
+            | None -> next.Invoke(env))
+        if config.RunRemoting then
+            AppFunc(RemotingMiddleware(siteletAppFunc, config).Invoke)
+        else
+            siteletAppFunc
+
     member this.Invoke(env: Env) =
-        let context = OwinContext(env) :> IOwinContext
-        match dispatch cb sitelet context with
-        | Some t -> t
-        | None -> next.Invoke(env)
+        appFunc.Invoke(env)
 
     // UseCustomSitelet
 
@@ -494,16 +502,13 @@ module Extensions =
             this.Use(RemotingMiddleware.AsMidFunc(webRoot, ?binDirectory = binDirectory))
 
         member this.UseWebSharperRemotingFromBin(binDirectory: string) =
-            this.UseWebSharperRemoting(binDirectory, binDirectory)
+            this.Use(RemotingMiddleware.AsMidFunc(binDirectory, binDirectory = binDirectory))
 
         member this.UseSitelet(webRoot: string, sitelet, ?binDirectory) =
-            this.UseCustomSitelet(Options.Create(webRoot, ?binDirectory = binDirectory), sitelet)
+            this.Use(SiteletMiddleware<'T>.AsMidFunc(webRoot, sitelet, ?binDirectory = binDirectory))
 
         member this.UseCustomSitelet(config: Options, sitelet: Sitelet<'T>) =
-            (if config.RunRemoting then
-                this.UseWebSharperRemoting(config.Metadata)
-            else this)
-                .Use(SiteletMiddleware<'T>.AsMidFunc(config, sitelet))
+            this.Use(SiteletMiddleware<'T>.AsMidFunc(config, sitelet))
 
         member this.UseDiscoveredSitelet(webRoot: string, ?binDirectory) =
             this.Use(SiteletMiddleware<obj>.AsMidFunc(webRoot, ?binDirectory = binDirectory))

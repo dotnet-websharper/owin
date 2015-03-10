@@ -399,9 +399,33 @@ type RemotingMiddleware(next: AppFunc, webRoot: string, meta: M.Info) =
             :> Task
         else next.Invoke(env)
 
+    // (webRoot, meta)
+
     static member AsMidFunc(webRoot: string, meta: M.Info) =
         MidFunc(fun next ->
-            AppFunc (RemotingMiddleware(next, webRoot, meta).Invoke))
+            AppFunc(RemotingMiddleware(next, webRoot, meta).Invoke))
+
+    // (options)
+
+    new (next, options: Options) =
+        new RemotingMiddleware(next, options.ServerRootDirectory, options.Metadata)
+
+    static member AsMidFunc(options: Options) =
+        MidFunc(fun next ->
+            AppFunc(RemotingMiddleware(next, options).Invoke))
+
+    // (webRoot, ?binDirectory)
+
+    new (next, webRoot: string, ?binDirectory: string) =
+        let meta =
+            match binDirectory with
+            | None -> M.Info.LoadFromWebRoot(webRoot)
+            | Some binDirectory -> M.Info.LoadFromBinDirectory(binDirectory)
+        new RemotingMiddleware(next, webRoot, meta)
+
+    static member AsMidFunc(webRoot: string, ?binDirectory: string) =
+        MidFunc(fun next ->
+            AppFunc(RemotingMiddleware(next, webRoot, ?binDirectory = binDirectory).Invoke))
 
 type SiteletMiddleware<'T when 'T : equality>(next: AppFunc, config: Options, sitelet: Sitelet<'T>) =
     let cb = ContextBuilder(config)
@@ -412,40 +436,25 @@ type SiteletMiddleware<'T when 'T : equality>(next: AppFunc, config: Options, si
         | Some t -> t
         | None -> next.Invoke(env)
 
+    // UseCustomSitelet
+
     static member AsMidFunc(config: Options, sitelet: Sitelet<'T>) =
         MidFunc(fun next ->
-            AppFunc (SiteletMiddleware(next, config, sitelet).Invoke))
+            AppFunc(SiteletMiddleware(next, config, sitelet).Invoke))
 
-[<AutoOpen>]
-module Extensions =
-    type IAppBuilder with
+    // UseSitelet
 
-        member this.UseWebSharperRemoting(webRoot: string, meta: M.Info) =
-            this.Use(RemotingMiddleware.AsMidFunc(webRoot, meta))
+    new(next: AppFunc, webRoot: string, sitelet: Sitelet<'T>, ?binDirectory: string) =
+        let options = Options.Create(webRoot, ?binDirectory = binDirectory)
+        new SiteletMiddleware<'T>(next, options, sitelet)
 
-        member this.UseWebSharperRemoting(meta: M.Info) =
-            this.UseWebSharperRemoting(System.IO.Directory.GetCurrentDirectory(), meta)
+    static member AsMidFunc(webRoot: string, sitelet: Sitelet<'T>, ?binDirectory: string) =
+        MidFunc(fun next ->
+            AppFunc(SiteletMiddleware(next, webRoot, sitelet, ?binDirectory = binDirectory).Invoke))
 
-        member this.UseWebSharperRemoting(webRoot: string, ?binDirectory: string) =
-            let meta =
-                match binDirectory with
-                | None -> M.Info.LoadFromWebRoot(webRoot)
-                | Some binDirectory -> M.Info.LoadFromBinDirectory(binDirectory)
-            this.UseWebSharperRemoting(webRoot, meta)
+    // UseDiscoveredSitelet
 
-        member this.UseWebSharperRemotingFromBin(binDirectory: string) =
-            this.UseWebSharperRemoting(binDirectory, binDirectory)
-
-        member this.UseSitelet(webRoot: string, sitelet, ?binDirectory) =
-            this.UseCustomSitelet(Options.Create(webRoot, ?binDirectory = binDirectory), sitelet)
-
-        member this.UseCustomSitelet(config: Options, sitelet: Sitelet<'T>) =
-            (if config.RunRemoting then
-                this.UseWebSharperRemoting(config.Metadata)
-            else this)
-                .Use(SiteletMiddleware.AsMidFunc(config, sitelet))
-
-        member this.UseDiscoveredSitelet(webRoot: string, ?binDirectory) =
+    static member Create(next: AppFunc, webRoot: string, ?binDirectory: string) =
             let binDirectory = defaultArg binDirectory (Path.Combine(webRoot, "bin"))
             let binDir = DirectoryInfo(binDirectory)
             let ok =
@@ -459,8 +468,42 @@ module Extensions =
                     match Attribute.GetCustomAttribute(assem, aT) with
                     | :? WebsiteAttribute as attr ->
                         let (sitelet, actions) = attr.Run()
-                        Some (this.UseSitelet(webRoot, sitelet))
+                        new SiteletMiddleware<obj>(next, webRoot, sitelet, ?binDirectory = None)
+                        |> Some
                     | _ -> None)
             match ok with
             | Some this -> this
             | None -> failwith "Failed to discover sitelet assemblies"
+
+    static member AsMidFunc(webRoot: string, ?binDirectory: string) =
+        MidFunc(fun next ->
+            AppFunc(SiteletMiddleware<obj>.Create(
+                        next, webRoot, ?binDirectory = binDirectory).Invoke))
+
+[<AutoOpen>]
+module Extensions =
+    type IAppBuilder with
+
+        member this.UseWebSharperRemoting(webRoot: string, meta: M.Info) =
+            this.Use(RemotingMiddleware.AsMidFunc(webRoot, meta))
+
+        member this.UseWebSharperRemoting(meta: M.Info) =
+            this.Use(RemotingMiddleware.AsMidFunc(System.IO.Directory.GetCurrentDirectory(), meta))
+
+        member this.UseWebSharperRemoting(webRoot: string, ?binDirectory: string) =
+            this.Use(RemotingMiddleware.AsMidFunc(webRoot, ?binDirectory = binDirectory))
+
+        member this.UseWebSharperRemotingFromBin(binDirectory: string) =
+            this.UseWebSharperRemoting(binDirectory, binDirectory)
+
+        member this.UseSitelet(webRoot: string, sitelet, ?binDirectory) =
+            this.UseCustomSitelet(Options.Create(webRoot, ?binDirectory = binDirectory), sitelet)
+
+        member this.UseCustomSitelet(config: Options, sitelet: Sitelet<'T>) =
+            (if config.RunRemoting then
+                this.UseWebSharperRemoting(config.Metadata)
+            else this)
+                .Use(SiteletMiddleware<'T>.AsMidFunc(config, sitelet))
+
+        member this.UseDiscoveredSitelet(webRoot: string, ?binDirectory) =
+            this.Use(SiteletMiddleware<obj>.AsMidFunc(webRoot, ?binDirectory = binDirectory))

@@ -42,14 +42,64 @@ type AppFunc = Func<Env, Task>
 type MidFunc = Func<AppFunc, AppFunc>
 
 type RemotingMiddleware =
-    new : next: AppFunc * webRoot: string * meta: M.Info -> RemotingMiddleware
+
     member Invoke : Env -> Task
+
+    /// Runs the WebSharper Remoting service, allowing WebSharper-compiled
+    /// client-side code to invoke [<Rpc>]-annotated server-side functions.
+    new : next: AppFunc * Options -> RemotingMiddleware
+    /// Runs the WebSharper Remoting service, allowing WebSharper-compiled
+    /// client-side code to invoke [<Rpc>]-annotated server-side functions.
+    static member AsMidFunc : Options -> MidFunc
+
+    /// Runs the WebSharper Remoting service, allowing WebSharper-compiled
+    /// client-side code to invoke [<Rpc>]-annotated server-side functions.
+    new : next: AppFunc * webRoot: string * meta: M.Info -> RemotingMiddleware
+    /// Runs the WebSharper Remoting service, allowing WebSharper-compiled
+    /// client-side code to invoke [<Rpc>]-annotated server-side functions.
     static member AsMidFunc : webRoot: string * meta: M.Info -> MidFunc
 
+    /// Runs the WebSharper Remoting service, allowing WebSharper-compiled
+    /// client-side code to invoke [<Rpc>]-annotated server-side functions.
+    /// WebSharper metadata is loaded from binDirectory.
+    /// If binDirectory is not specified, webRoot/bin is used.
+    new : next: AppFunc * webRoot: string * ?binDirectory: string -> RemotingMiddleware
+    /// Runs the WebSharper Remoting service, allowing WebSharper-compiled
+    /// client-side code to invoke [<Rpc>]-annotated server-side functions.
+    /// WebSharper metadata is loaded from binDirectory.
+    /// If binDirectory is not specified, webRoot/bin is used.
+    static member AsMidFunc : webRoot: string * ?binDirectory: string -> MidFunc
+
 type SiteletMiddleware<'T when 'T : equality> =
-    new : next: AppFunc * config: Options * sitelet: Sitelet<'T> -> SiteletMiddleware<'T>
+
     member Invoke : Env -> Task
+
+    /// Runs the provided Sitelet with the provided options.
+    new : next: AppFunc * config: Options * sitelet: Sitelet<'T> -> SiteletMiddleware<'T>
+    /// Runs the provided Sitelet with the provided options.
     static member AsMidFunc : config: Options * sitelet: Sitelet<'T> -> MidFunc
+
+    /// Runs the provided Sitelet with webRoot as the root folder, using
+    /// WebSharper metadata loaded from assemblies located in binDirectory.
+    /// Also runs the Remoting service using metadata discovered from binDirectory.
+    /// If binDirectory is not specified, webRoot/bin is used.
+    new : next: AppFunc * webRoot: string * sitelet: Sitelet<'T> * ?binDirectory: string -> SiteletMiddleware<'T>
+    /// Runs the provided Sitelet with webRoot as the root folder, using
+    /// WebSharper metadata loaded from assemblies located in binDirectory.
+    /// Also runs the Remoting service using metadata discovered from binDirectory.
+    /// If binDirectory is not specified, webRoot/bin is used.
+    static member AsMidFunc : webRoot: string * sitelet: Sitelet<'T> * ?binDirectory: string -> MidFunc
+
+    /// Inspects the binDirectory folder, looking for an assembly that contains
+    /// a WebSharper Sitelet, and runs this Sitelet with webRoot as the root folder.
+    /// Also runs the Remoting service using metadata discovered from binDirectory.
+    /// If binDirectory is not specified, webRoot/bin is used.
+    static member Create : next: AppFunc * webRoot: string * ?binDirectory: string -> SiteletMiddleware<obj>
+    /// Inspects the binDirectory folder, looking for an assembly that contains
+    /// a WebSharper Sitelet, and runs this Sitelet with webRoot as the root folder.
+    /// Also runs the Remoting service using metadata discovered from binDirectory.
+    /// If binDirectory is not specified, webRoot/bin is used.
+    static member AsMidFunc : webRoot: string * ?binDirectory: string -> MidFunc
 
 [<AutoOpen>]
 module Extensions =
@@ -59,11 +109,13 @@ module Extensions =
     type IAppBuilder with
         /// Inspects the binDirectory folder, looking for an assembly that contains
         /// a WebSharper Sitelet, and runs this Sitelet with webRoot as the root folder.
+        /// Also runs the Remoting service using metadata discovered from binDirectory.
         /// If binDirectory is not specified, webRoot/bin is used.
         member UseDiscoveredSitelet : webRoot: string * ?binDirectory: string -> IAppBuilder
 
         /// Runs the provided Sitelet with webRoot as the root folder, using
         /// WebSharper metadata loaded from assemblies located in binDirectory.
+        /// Also runs the Remoting service using metadata discovered from binDirectory.
         /// If binDirectory is not specified, webRoot/bin is used.
         member UseSitelet : webRoot: string * Sitelet<'T> * ?binDirectory: string -> IAppBuilder
 
@@ -76,7 +128,7 @@ module Extensions =
         /// methods UseDiscoveredSitelet and UseSitelet, as well as
         /// UseCustomSitelet if options.RunRemoting is set to true.
         /// WebSharper metadata is loaded from binDirectory.
-        /// If binDirectory is not specified, webRoot/bin.
+        /// If binDirectory is not specified, webRoot/bin is used.
         member UseWebSharperRemoting : webRoot: string * ?binDirectory: string -> IAppBuilder
 
         /// Runs the WebSharper Remoting service, allowing WebSharper-compiled
@@ -90,6 +142,7 @@ module Extensions =
 
         /// Runs the WebSharper Remoting service, allowing WebSharper-compiled
         /// client-side code to invoke [<Rpc>]-annotated server-side functions.
+        /// The current working directory is used as application root.
         /// Note that the Remoting service is automatically run by the
         /// methods UseDiscoveredSitelet and UseSitelet, as well as
         /// UseCustomSitelet if options.RunRemoting is set to true.

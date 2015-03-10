@@ -355,7 +355,7 @@ type Options with
         let meta = M.Info.LoadFromBinDirectory dir
         { o with Metadata = meta }
 
-type WebSharperRemotingMiddleware(next: AppFunc, webRoot: string, meta: M.Info) =
+type RemotingMiddleware(next: AppFunc, webRoot: string, meta: M.Info) =
     do Remoting.SetContext(fun () ->
         let owinCtx = !LocalOwinContext.Value
         let session = new OwinCookieUserSession(owinCtx)
@@ -401,7 +401,7 @@ type WebSharperRemotingMiddleware(next: AppFunc, webRoot: string, meta: M.Info) 
 
     static member AsMidFunc(webRoot: string, meta: M.Info) =
         MidFunc(fun next ->
-            AppFunc (WebSharperRemotingMiddleware(next, webRoot, meta).Invoke))
+            AppFunc (RemotingMiddleware(next, webRoot, meta).Invoke))
 
 type SiteletMiddleware<'T when 'T : equality>(next: AppFunc, config: Options, sitelet: Sitelet<'T>) =
     let cb = ContextBuilder(config)
@@ -421,7 +421,7 @@ module Extensions =
     type IAppBuilder with
 
         member this.UseWebSharperRemoting(webRoot: string, meta: M.Info) =
-            this.Use(WebSharperRemotingMiddleware.AsMidFunc(webRoot, meta))
+            this.Use(RemotingMiddleware.AsMidFunc(webRoot, meta))
 
         member this.UseWebSharperRemoting(meta: M.Info) =
             this.UseWebSharperRemoting(System.IO.Directory.GetCurrentDirectory(), meta)

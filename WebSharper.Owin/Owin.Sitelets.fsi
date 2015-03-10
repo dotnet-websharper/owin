@@ -1,6 +1,10 @@
 ﻿namespace WebSharper.Owin
 
+open System
+open System.Collections.Generic
+open System.Threading.Tasks
 open WebSharper
+open WebSharper.Sitelets
 module M = WebSharper.Core.Metadata
 
 /// Options to initialize a sitelet server with IAppBuilder.UseCustomSitelet.
@@ -33,11 +37,24 @@ type Options =
     /// Sets whether the WebSharper Remoting service should be run.
     member WithRunRemoting : bool -> Options
 
+type Env = IDictionary<string, obj>
+type AppFunc = Func<Env, Task>
+type MidFunc = Func<AppFunc, AppFunc>
+
+type RemotingMiddleware =
+    new : next: AppFunc * webRoot: string * meta: M.Info -> RemotingMiddleware
+    member Invoke : Env -> Task
+    static member AsMidFunc : webRoot: string * meta: M.Info -> MidFunc
+
+type SiteletMiddleware<'T when 'T : equality> =
+    new : next: AppFunc * config: Options * sitelet: Sitelet<'T> -> SiteletMiddleware<'T>
+    member Invoke : Env -> Task
+    static member AsMidFunc : config: Options * sitelet: Sitelet<'T> -> MidFunc
+
 [<AutoOpen>]
 module Extensions =
 
     open global.Owin
-    open WebSharper.Sitelets
 
     type IAppBuilder with
         /// Inspects the binDirectory folder, looking for an assembly that contains

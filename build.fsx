@@ -2,7 +2,7 @@
 open IntelliFactory.Build
 
 let bt =
-    BuildTool().PackageId("WebSharper.Owin", "3.0-alpha")
+    BuildTool().PackageId("WebSharper.Owin", "3.0")
 
 let multipartParser =
     bt.MSBuild("HttpMultipartParser/HttpMultipartParser.csproj")

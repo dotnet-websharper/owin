@@ -54,13 +54,6 @@ type RemotingMiddleware =
 
     /// Runs the WebSharper Remoting service, allowing WebSharper-compiled
     /// client-side code to invoke [<Rpc>]-annotated server-side functions.
-    new : next: AppFunc * webRoot: string * meta: M.Info -> RemotingMiddleware
-    /// Runs the WebSharper Remoting service, allowing WebSharper-compiled
-    /// client-side code to invoke [<Rpc>]-annotated server-side functions.
-    static member AsMidFunc : webRoot: string * meta: M.Info -> MidFunc
-
-    /// Runs the WebSharper Remoting service, allowing WebSharper-compiled
-    /// client-side code to invoke [<Rpc>]-annotated server-side functions.
     /// WebSharper metadata is loaded from binDirectory.
     /// If binDirectory is not specified, webRoot/bin is used.
     new : next: AppFunc * webRoot: string * ?binDirectory: string -> RemotingMiddleware

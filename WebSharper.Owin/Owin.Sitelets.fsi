@@ -72,22 +72,11 @@ type SiteletMiddleware<'T when 'T : equality> =
     /// Runs the provided Sitelet with the provided options.
     static member AsMidFunc : config: Options * sitelet: Sitelet<'T> -> MidFunc
 
-    /// Runs the provided Sitelet with webRoot as the root folder, using
-    /// WebSharper metadata loaded from assemblies located in binDirectory.
-    /// Also runs the Remoting service using metadata discovered from binDirectory.
-    /// If binDirectory is not specified, webRoot/bin is used.
-    new : next: AppFunc * webRoot: string * sitelet: Sitelet<'T> * ?binDirectory: string -> SiteletMiddleware<'T>
-    /// Runs the provided Sitelet with webRoot as the root folder, using
-    /// WebSharper metadata loaded from assemblies located in binDirectory.
-    /// Also runs the Remoting service using metadata discovered from binDirectory.
-    /// If binDirectory is not specified, webRoot/bin is used.
-    static member AsMidFunc : webRoot: string * sitelet: Sitelet<'T> * ?binDirectory: string -> MidFunc
-
     /// Inspects the binDirectory folder, looking for an assembly that contains
     /// a WebSharper Sitelet, and runs this Sitelet with webRoot as the root folder.
     /// Also runs the Remoting service using metadata discovered from binDirectory.
     /// If binDirectory is not specified, webRoot/bin is used.
-    static member Create : webRoot: string * ?binDirectory: string -> (AppFunc -> SiteletMiddleware<obj>)
+    static member UseDiscoveredSitelet : webRoot: string * ?binDirectory: string -> (AppFunc -> SiteletMiddleware<obj>)
     /// Inspects the binDirectory folder, looking for an assembly that contains
     /// a WebSharper Sitelet, and runs this Sitelet with webRoot as the root folder.
     /// Also runs the Remoting service using metadata discovered from binDirectory.

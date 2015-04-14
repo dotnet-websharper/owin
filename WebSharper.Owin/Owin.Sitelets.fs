@@ -440,25 +440,11 @@ type SiteletMiddleware<'T when 'T : equality>(next: AppFunc, config: Options, si
     member this.Invoke(env: Env) =
         appFunc.Invoke(env)
 
-    // UseCustomSitelet
-
     static member AsMidFunc(config: Options, sitelet: Sitelet<'T>) =
         MidFunc(fun next ->
             AppFunc(SiteletMiddleware(next, config, sitelet).Invoke))
 
-    // UseSitelet
-
-    new(next: AppFunc, webRoot: string, sitelet: Sitelet<'T>, ?binDirectory: string) =
-        let options = Options.Create(webRoot, ?binDirectory = binDirectory)
-        new SiteletMiddleware<'T>(next, options, sitelet)
-
-    static member AsMidFunc(webRoot: string, sitelet: Sitelet<'T>, ?binDirectory: string) =
-        MidFunc(fun next ->
-            AppFunc(SiteletMiddleware(next, webRoot, sitelet, ?binDirectory = binDirectory).Invoke))
-
-    // UseDiscoveredSitelet
-
-    static member Create(webRoot: string, ?binDirectory: string) =
+    static member UseDiscoveredSitelet(webRoot: string, ?binDirectory: string) =
         let binDirectory = defaultArg binDirectory (Path.Combine(webRoot, "bin"))
         let binDir = DirectoryInfo(binDirectory)
         let ok =
@@ -472,8 +458,9 @@ type SiteletMiddleware<'T when 'T : equality>(next: AppFunc, config: Options, si
                 match Attribute.GetCustomAttribute(assem, aT) with
                 | :? WebsiteAttribute as attr ->
                     let (sitelet, actions) = attr.Run()
+                    let options = Options.Create(webRoot, binDirectory = binDirectory)
                     fun next ->
-                        SiteletMiddleware<obj>(next, webRoot, sitelet, ?binDirectory = None)
+                        SiteletMiddleware<obj>(next, options, sitelet)
                     |> Some
                 | _ -> None)
         match ok with
@@ -481,7 +468,7 @@ type SiteletMiddleware<'T when 'T : equality>(next: AppFunc, config: Options, si
         | None -> failwith "Failed to discover sitelet assemblies"
 
     static member AsMidFunc(webRoot: string, ?binDirectory: string) =
-        let mw = SiteletMiddleware<obj>.Create(webRoot, ?binDirectory = binDirectory)
+        let mw = SiteletMiddleware<obj>.UseDiscoveredSitelet(webRoot, ?binDirectory = binDirectory)
         MidFunc(fun next -> AppFunc(mw(next).Invoke))
 
 [<AutoOpen>]
@@ -501,7 +488,7 @@ module Extensions =
             this.Use(RemotingMiddleware.AsMidFunc(binDirectory, binDirectory = binDirectory))
 
         member this.UseSitelet(webRoot: string, sitelet, ?binDirectory) =
-            this.Use(SiteletMiddleware<'T>.AsMidFunc(webRoot, sitelet, ?binDirectory = binDirectory))
+            this.UseCustomSitelet(Options.Create(webRoot, ?binDirectory = binDirectory), sitelet)
 
         member this.UseCustomSitelet(config: Options, sitelet: Sitelet<'T>) =
             this.Use(SiteletMiddleware<'T>.AsMidFunc(config, sitelet))

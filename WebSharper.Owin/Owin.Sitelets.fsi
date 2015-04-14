@@ -87,7 +87,7 @@ type SiteletMiddleware<'T when 'T : equality> =
     /// a WebSharper Sitelet, and runs this Sitelet with webRoot as the root folder.
     /// Also runs the Remoting service using metadata discovered from binDirectory.
     /// If binDirectory is not specified, webRoot/bin is used.
-    static member Create : next: AppFunc * webRoot: string * ?binDirectory: string -> SiteletMiddleware<obj>
+    static member Create : webRoot: string * ?binDirectory: string -> (AppFunc -> SiteletMiddleware<obj>)
     /// Inspects the binDirectory folder, looking for an assembly that contains
     /// a WebSharper Sitelet, and runs this Sitelet with webRoot as the root folder.
     /// Also runs the Remoting service using metadata discovered from binDirectory.

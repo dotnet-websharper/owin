@@ -458,31 +458,31 @@ type SiteletMiddleware<'T when 'T : equality>(next: AppFunc, config: Options, si
 
     // UseDiscoveredSitelet
 
-    static member Create(next: AppFunc, webRoot: string, ?binDirectory: string) =
-            let binDirectory = defaultArg binDirectory (Path.Combine(webRoot, "bin"))
-            let binDir = DirectoryInfo(binDirectory)
-            let ok =
-                binDir.DiscoverAssemblies()
-                |> Seq.choose (fun p ->
-                    try Some (Assembly.LoadFileInfo(p))
-                    with e -> None)
-                |> Array.ofSeq
-                |> Seq.tryPick (fun assem ->
-                    let aT = typeof<WebsiteAttribute>
-                    match Attribute.GetCustomAttribute(assem, aT) with
-                    | :? WebsiteAttribute as attr ->
-                        let (sitelet, actions) = attr.Run()
-                        new SiteletMiddleware<obj>(next, webRoot, sitelet, ?binDirectory = None)
-                        |> Some
-                    | _ -> None)
-            match ok with
-            | Some this -> this
-            | None -> failwith "Failed to discover sitelet assemblies"
+    static member Create(webRoot: string, ?binDirectory: string) =
+        let binDirectory = defaultArg binDirectory (Path.Combine(webRoot, "bin"))
+        let binDir = DirectoryInfo(binDirectory)
+        let ok =
+            binDir.DiscoverAssemblies()
+            |> Seq.choose (fun p ->
+                try Some (Assembly.LoadFileInfo(p))
+                with e -> None)
+            |> Array.ofSeq
+            |> Seq.tryPick (fun assem ->
+                let aT = typeof<WebsiteAttribute>
+                match Attribute.GetCustomAttribute(assem, aT) with
+                | :? WebsiteAttribute as attr ->
+                    let (sitelet, actions) = attr.Run()
+                    fun next ->
+                        SiteletMiddleware<obj>(next, webRoot, sitelet, ?binDirectory = None)
+                    |> Some
+                | _ -> None)
+        match ok with
+        | Some this -> this
+        | None -> failwith "Failed to discover sitelet assemblies"
 
     static member AsMidFunc(webRoot: string, ?binDirectory: string) =
-        MidFunc(fun next ->
-            AppFunc(SiteletMiddleware<obj>.Create(
-                        next, webRoot, ?binDirectory = binDirectory).Invoke))
+        let mw = SiteletMiddleware<obj>.Create(webRoot, ?binDirectory = binDirectory)
+        MidFunc(fun next -> AppFunc(mw(next).Invoke))
 
 [<AutoOpen>]
 module Extensions =

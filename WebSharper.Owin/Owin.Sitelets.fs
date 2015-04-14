@@ -355,7 +355,7 @@ type Options with
         let meta = M.Info.LoadFromBinDirectory dir
         { o with Metadata = meta }
 
-type RemotingMiddleware(next: AppFunc, webRoot: string, meta: M.Info) =
+type RemotingMiddleware(webRoot: string, meta: M.Info) =
     do Remoting.SetContext(fun () ->
         let owinCtx = !LocalOwinContext.Value
         let session = new OwinCookieUserSession(owinCtx)
@@ -368,7 +368,7 @@ type RemotingMiddleware(next: AppFunc, webRoot: string, meta: M.Info) =
         })
     let serv = Rem.Server.Create None meta
 
-    member this.Invoke(env: Env) =
+    member this.Invoke (next: AppFunc) (env: Env) =
         let context = OwinContext(env) :> IOwinContext
         let headers =
             O2W.Headers context.Request.Headers
@@ -402,67 +402,68 @@ type RemotingMiddleware(next: AppFunc, webRoot: string, meta: M.Info) =
     // (webRoot, meta)
 
     static member AsMidFunc(webRoot: string, meta: M.Info) =
-        MidFunc(fun next ->
-            AppFunc(RemotingMiddleware(next, webRoot, meta).Invoke))
+        let middleware = RemotingMiddleware(webRoot, meta)
+        MidFunc(fun next -> AppFunc(middleware.Invoke next))
 
     // (options)
 
-    new (next, options: Options) =
-        new RemotingMiddleware(next, options.ServerRootDirectory, options.Metadata)
+    new (options: Options) =
+        new RemotingMiddleware(options.ServerRootDirectory, options.Metadata)
 
     static member AsMidFunc(options: Options) =
-        MidFunc(fun next ->
-            AppFunc(RemotingMiddleware(next, options).Invoke))
+        let middleware = RemotingMiddleware(options)
+        MidFunc(fun next -> AppFunc(middleware.Invoke next))
 
     // (webRoot, ?binDirectory)
 
-    new (next, webRoot: string, ?binDirectory: string) =
+    new (webRoot: string, ?binDirectory: string) =
         let meta =
             match binDirectory with
             | None -> M.Info.LoadFromWebRoot(webRoot)
             | Some binDirectory -> M.Info.LoadFromBinDirectory(binDirectory)
-        new RemotingMiddleware(next, webRoot, meta)
+        new RemotingMiddleware(webRoot, meta)
 
     static member AsMidFunc(webRoot: string, ?binDirectory: string) =
-        MidFunc(fun next ->
-            AppFunc(RemotingMiddleware(next, webRoot, ?binDirectory = binDirectory).Invoke))
+        let middleware = RemotingMiddleware(webRoot, ?binDirectory = binDirectory)
+        MidFunc(fun next -> AppFunc(middleware.Invoke next))
 
-type SiteletMiddleware<'T when 'T : equality>(next: AppFunc, config: Options, sitelet: Sitelet<'T>) =
+type SiteletMiddleware<'T when 'T : equality>(config: Options, sitelet: Sitelet<'T>) =
     let cb = ContextBuilder(config)
 
-    let appFunc =
+    let appFunc (next: AppFunc) =
         let siteletAppFunc = AppFunc(fun env ->
             let context = OwinContext(env) :> IOwinContext
             match dispatch cb sitelet context with
             | Some t -> t
             | None -> next.Invoke(env))
         if config.RunRemoting then
-            AppFunc(RemotingMiddleware(siteletAppFunc, config).Invoke)
+            let middleware = RemotingMiddleware(config)
+            AppFunc(middleware.Invoke siteletAppFunc)
         else
             siteletAppFunc
 
-    member this.Invoke(env: Env) =
-        appFunc.Invoke(env)
+    member this.Invoke (next: AppFunc) (env: Env) =
+        appFunc(next).Invoke(env)
 
     // UseCustomSitelet
 
     static member AsMidFunc(config: Options, sitelet: Sitelet<'T>) =
-        MidFunc(fun next ->
-            AppFunc(SiteletMiddleware(next, config, sitelet).Invoke))
+        let middleware = SiteletMiddleware(config, sitelet)
+        MidFunc(fun next -> AppFunc(middleware.Invoke next))
 
     // UseSitelet
 
-    new(next: AppFunc, webRoot: string, sitelet: Sitelet<'T>, ?binDirectory: string) =
+    new(webRoot: string, sitelet: Sitelet<'T>, ?binDirectory: string) =
         let options = Options.Create(webRoot, ?binDirectory = binDirectory)
-        new SiteletMiddleware<'T>(next, options, sitelet)
+        new SiteletMiddleware<'T>(options, sitelet)
 
     static member AsMidFunc(webRoot: string, sitelet: Sitelet<'T>, ?binDirectory: string) =
-        MidFunc(fun next ->
-            AppFunc(SiteletMiddleware(next, webRoot, sitelet, ?binDirectory = binDirectory).Invoke))
+        let middleware = SiteletMiddleware(webRoot, sitelet, ?binDirectory = binDirectory)
+        MidFunc(fun next -> AppFunc(middleware.Invoke next))
 
     // UseDiscoveredSitelet
 
-    static member Create(next: AppFunc, webRoot: string, ?binDirectory: string) =
+    static member Create(webRoot: string, ?binDirectory: string) =
             let binDirectory = defaultArg binDirectory (Path.Combine(webRoot, "bin"))
             let binDir = DirectoryInfo(binDirectory)
             let ok =
@@ -476,7 +477,7 @@ type SiteletMiddleware<'T when 'T : equality>(next: AppFunc, config: Options, si
                     match Attribute.GetCustomAttribute(assem, aT) with
                     | :? WebsiteAttribute as attr ->
                         let (sitelet, actions) = attr.Run()
-                        new SiteletMiddleware<obj>(next, webRoot, sitelet, ?binDirectory = None)
+                        new SiteletMiddleware<obj>(webRoot, sitelet, ?binDirectory = None)
                         |> Some
                     | _ -> None)
             match ok with
@@ -484,9 +485,8 @@ type SiteletMiddleware<'T when 'T : equality>(next: AppFunc, config: Options, si
             | None -> failwith "Failed to discover sitelet assemblies"
 
     static member AsMidFunc(webRoot: string, ?binDirectory: string) =
-        MidFunc(fun next ->
-            AppFunc(SiteletMiddleware<obj>.Create(
-                        next, webRoot, ?binDirectory = binDirectory).Invoke))
+        let middleware = SiteletMiddleware<obj>.Create(webRoot, ?binDirectory = binDirectory)
+        MidFunc(fun next -> AppFunc(middleware.Invoke next))
 
 [<AutoOpen>]
 module Extensions =

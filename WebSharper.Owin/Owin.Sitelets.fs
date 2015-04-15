@@ -29,33 +29,23 @@ type Options =
         Metadata : M.Info
         ServerRootDirectory : string
         UrlPrefix : string
-        RunRemoting : bool
+        RemotingServer : option<Rem.Server>
     }
 
     member o.WithDebug() = o.WithDebug(true)
     member o.WithDebug(d) = { o with Debug = d }
     member o.WithServerRootDirectory(d) = { o with ServerRootDirectory = d }
     member o.WithUrlPrefix(t) = { o with UrlPrefix = t }
-    member o.WithRunRemoting(b) = { o with RunRemoting = b }
 
     static member Create() =
+        let dir = System.IO.Directory.GetCurrentDirectory()
         {
             Debug = false
             JsonProvider = Core.Json.Provider.Create()
             Metadata = M.Info.Create([])
-            ServerRootDirectory = "."
+            ServerRootDirectory = dir
             UrlPrefix = ""
-            RunRemoting = true
-        }
-
-    static member Create(meta) =
-        {
-            Debug = false
-            JsonProvider = Core.Json.Provider.CreateTyped(meta)
-            Metadata = meta
-            ServerRootDirectory = "."
-            UrlPrefix = ""
-            RunRemoting = true
+            RemotingServer = None
         }
 
 [<AutoOpen>]
@@ -244,8 +234,6 @@ module private Internal =
                     return refresh null
                 }
 
-    let LocalOwinContext = new System.Threading.ThreadLocal<IOwinContext ref>(fun () -> ref null)
-
     [<Sealed>]
     type ContextBuilder(cfg) =
         let info = cfg.Metadata
@@ -345,6 +333,22 @@ module private Internal =
 
 type Options with
 
+    static member Create(meta) =
+        let dir = System.IO.Directory.GetCurrentDirectory()
+        {
+            Debug = false
+            JsonProvider = Core.Json.Provider.CreateTyped(meta)
+            Metadata = meta
+            ServerRootDirectory = dir
+            UrlPrefix = ""
+            RemotingServer = Some (Rem.Server.Create None meta)
+        }
+
+    member o.WithRunRemoting(b) =
+        let server =
+            if b then Some (Rem.Server.Create None o.Metadata) else None
+        { o with RemotingServer = server }
+
     static member Create(webRoot, ?binDirectory) =
         let binDirectory = defaultArg binDirectory (Path.Combine(webRoot, "bin"))
         let meta = M.Info.LoadFromBinDirectory(binDirectory)
@@ -355,18 +359,7 @@ type Options with
         let meta = M.Info.LoadFromBinDirectory dir
         { o with Metadata = meta }
 
-type RemotingMiddleware(next: AppFunc, webRoot: string, meta: M.Info) =
-    do Remoting.SetContext(fun () ->
-        let owinCtx = !LocalOwinContext.Value
-        let session = new OwinCookieUserSession(owinCtx)
-        let uri = owinCtx.Request.Uri
-        Some {
-            new Web.IContext with
-                member this.UserSession = session :> _
-                member this.RequestUri = uri
-                member this.RootFolder = webRoot
-        })
-    let serv = Rem.Server.Create None meta
+type RemotingMiddleware(next: AppFunc, webRoot: string, server: Rem.Server) =
 
     member this.Invoke(env: Env) =
         let context = OwinContext(env) :> IOwinContext
@@ -380,13 +373,20 @@ type RemotingMiddleware(next: AppFunc, webRoot: string, meta: M.Info) =
             async {
                 try
                     use reader = new StreamReader(context.Request.Body)
+                    let session = new OwinCookieUserSession(context)
+                    let uri = context.Request.Uri
+                    let ctx =
+                        { new Web.IContext with
+                            member this.UserSession = session :> _
+                            member this.RequestUri = uri
+                            member this.RootFolder = webRoot }
                     let! body = reader.ReadToEndAsync() |> Async.AwaitTask
                     let! resp =
-                        LocalOwinContext.Value := context
-                        serv.HandleRequest {
-                            Body = body
-                            Headers = getHeader
-                        }
+                        server.HandleRequest(
+                            {
+                                Body = body
+                                Headers = getHeader
+                            }, ctx)
                     context.Response.StatusCode <- 200
                     context.Response.ContentType <- resp.ContentType
                     context.Response.Write(resp.Content)
@@ -399,16 +399,10 @@ type RemotingMiddleware(next: AppFunc, webRoot: string, meta: M.Info) =
             :> Task
         else next.Invoke(env)
 
-    // (webRoot, meta)
-
-    static member AsMidFunc(webRoot: string, meta: M.Info) =
-        MidFunc(fun next ->
-            AppFunc(RemotingMiddleware(next, webRoot, meta).Invoke))
-
     // (options)
 
     new (next, options: Options) =
-        new RemotingMiddleware(next, options.ServerRootDirectory, options.Metadata)
+        new RemotingMiddleware(next, options.ServerRootDirectory, options.RemotingServer.Value)
 
     static member AsMidFunc(options: Options) =
         MidFunc(fun next ->
@@ -416,16 +410,17 @@ type RemotingMiddleware(next: AppFunc, webRoot: string, meta: M.Info) =
 
     // (webRoot, ?binDirectory)
 
-    new (next, webRoot: string, ?binDirectory: string) =
+    static member UseRemoting(webRoot: string, ?binDirectory: string) =
         let meta =
             match binDirectory with
             | None -> M.Info.LoadFromWebRoot(webRoot)
             | Some binDirectory -> M.Info.LoadFromBinDirectory(binDirectory)
-        new RemotingMiddleware(next, webRoot, meta)
+        let o = Options.Create(meta).WithServerRootDirectory(webRoot)
+        fun next -> new RemotingMiddleware(next, o)
 
     static member AsMidFunc(webRoot: string, ?binDirectory: string) =
-        MidFunc(fun next ->
-            AppFunc(RemotingMiddleware(next, webRoot, ?binDirectory = binDirectory).Invoke))
+        let mw = RemotingMiddleware.UseRemoting(webRoot, ?binDirectory = binDirectory)
+        MidFunc(fun next -> AppFunc(mw(next).Invoke))
 
 type SiteletMiddleware<'T when 'T : equality>(next: AppFunc, config: Options, sitelet: Sitelet<'T>) =
     let cb = ContextBuilder(config)
@@ -436,7 +431,7 @@ type SiteletMiddleware<'T when 'T : equality>(next: AppFunc, config: Options, si
             match dispatch cb sitelet context with
             | Some t -> t
             | None -> next.Invoke(env))
-        if config.RunRemoting then
+        if config.RemotingServer.IsSome then
             AppFunc(RemotingMiddleware(siteletAppFunc, config).Invoke)
         else
             siteletAppFunc
@@ -444,59 +439,46 @@ type SiteletMiddleware<'T when 'T : equality>(next: AppFunc, config: Options, si
     member this.Invoke(env: Env) =
         appFunc.Invoke(env)
 
-    // UseCustomSitelet
-
     static member AsMidFunc(config: Options, sitelet: Sitelet<'T>) =
         MidFunc(fun next ->
             AppFunc(SiteletMiddleware(next, config, sitelet).Invoke))
 
-    // UseSitelet
-
-    new(next: AppFunc, webRoot: string, sitelet: Sitelet<'T>, ?binDirectory: string) =
-        let options = Options.Create(webRoot, ?binDirectory = binDirectory)
-        new SiteletMiddleware<'T>(next, options, sitelet)
-
-    static member AsMidFunc(webRoot: string, sitelet: Sitelet<'T>, ?binDirectory: string) =
-        MidFunc(fun next ->
-            AppFunc(SiteletMiddleware(next, webRoot, sitelet, ?binDirectory = binDirectory).Invoke))
-
-    // UseDiscoveredSitelet
-
-    static member Create(next: AppFunc, webRoot: string, ?binDirectory: string) =
-            let binDirectory = defaultArg binDirectory (Path.Combine(webRoot, "bin"))
-            let binDir = DirectoryInfo(binDirectory)
-            let ok =
-                binDir.DiscoverAssemblies()
-                |> Seq.choose (fun p ->
-                    try Some (Assembly.LoadFileInfo(p))
-                    with e -> None)
-                |> Array.ofSeq
-                |> Seq.tryPick (fun assem ->
-                    let aT = typeof<WebsiteAttribute>
-                    match Attribute.GetCustomAttribute(assem, aT) with
-                    | :? WebsiteAttribute as attr ->
-                        let (sitelet, actions) = attr.Run()
-                        new SiteletMiddleware<obj>(next, webRoot, sitelet, ?binDirectory = None)
-                        |> Some
-                    | _ -> None)
-            match ok with
-            | Some this -> this
-            | None -> failwith "Failed to discover sitelet assemblies"
+    static member UseDiscoveredSitelet(webRoot: string, ?binDirectory: string) =
+        let binDirectory = defaultArg binDirectory (Path.Combine(webRoot, "bin"))
+        let binDir = DirectoryInfo(binDirectory)
+        let ok =
+            binDir.DiscoverAssemblies()
+            |> Seq.choose (fun p ->
+                try Some (Assembly.LoadFileInfo(p))
+                with e -> None)
+            |> Array.ofSeq
+            |> Seq.tryPick (fun assem ->
+                let aT = typeof<WebsiteAttribute>
+                match Attribute.GetCustomAttribute(assem, aT) with
+                | :? WebsiteAttribute as attr ->
+                    let (sitelet, actions) = attr.Run()
+                    let options = Options.Create(webRoot, binDirectory = binDirectory)
+                    fun next ->
+                        SiteletMiddleware<obj>(next, options, sitelet)
+                    |> Some
+                | _ -> None)
+        match ok with
+        | Some this -> this
+        | None -> failwith "Failed to discover sitelet assemblies"
 
     static member AsMidFunc(webRoot: string, ?binDirectory: string) =
-        MidFunc(fun next ->
-            AppFunc(SiteletMiddleware<obj>.Create(
-                        next, webRoot, ?binDirectory = binDirectory).Invoke))
+        let mw = SiteletMiddleware<obj>.UseDiscoveredSitelet(webRoot, ?binDirectory = binDirectory)
+        MidFunc(fun next -> AppFunc(mw(next).Invoke))
 
 [<AutoOpen>]
 module Extensions =
     type IAppBuilder with
 
         member this.UseWebSharperRemoting(webRoot: string, meta: M.Info) =
-            this.Use(RemotingMiddleware.AsMidFunc(webRoot, meta))
+            this.Use(RemotingMiddleware.AsMidFunc(Options.Create(meta).WithServerRootDirectory(webRoot)))
 
         member this.UseWebSharperRemoting(meta: M.Info) =
-            this.Use(RemotingMiddleware.AsMidFunc(System.IO.Directory.GetCurrentDirectory(), meta))
+            this.Use(RemotingMiddleware.AsMidFunc(Options.Create(meta)))
 
         member this.UseWebSharperRemoting(webRoot: string, ?binDirectory: string) =
             this.Use(RemotingMiddleware.AsMidFunc(webRoot, ?binDirectory = binDirectory))
@@ -505,7 +487,7 @@ module Extensions =
             this.Use(RemotingMiddleware.AsMidFunc(binDirectory, binDirectory = binDirectory))
 
         member this.UseSitelet(webRoot: string, sitelet, ?binDirectory) =
-            this.Use(SiteletMiddleware<'T>.AsMidFunc(webRoot, sitelet, ?binDirectory = binDirectory))
+            this.UseCustomSitelet(Options.Create(webRoot, ?binDirectory = binDirectory), sitelet)
 
         member this.UseCustomSitelet(config: Options, sitelet: Sitelet<'T>) =
             this.Use(SiteletMiddleware<'T>.AsMidFunc(config, sitelet))

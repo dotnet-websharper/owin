@@ -410,17 +410,17 @@ type RemotingMiddleware(next: AppFunc, webRoot: string, server: Rem.Server) =
 
     // (webRoot, ?binDirectory)
 
-    new (next, webRoot: string, ?binDirectory: string) =
+    static member UseRemoting(webRoot: string, ?binDirectory: string) =
         let meta =
             match binDirectory with
             | None -> M.Info.LoadFromWebRoot(webRoot)
             | Some binDirectory -> M.Info.LoadFromBinDirectory(binDirectory)
         let o = Options.Create(meta).WithServerRootDirectory(webRoot)
-        new RemotingMiddleware(next, o)
+        fun next -> new RemotingMiddleware(next, o)
 
     static member AsMidFunc(webRoot: string, ?binDirectory: string) =
-        MidFunc(fun next ->
-            AppFunc(RemotingMiddleware(next, webRoot, ?binDirectory = binDirectory).Invoke))
+        let mw = RemotingMiddleware.UseRemoting(webRoot, ?binDirectory = binDirectory)
+        MidFunc(fun next -> AppFunc(mw(next).Invoke))
 
 type SiteletMiddleware<'T when 'T : equality>(next: AppFunc, config: Options, sitelet: Sitelet<'T>) =
     let cb = ContextBuilder(config)

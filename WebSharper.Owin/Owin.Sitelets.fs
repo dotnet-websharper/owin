@@ -373,21 +373,20 @@ type RemotingMiddleware(next: AppFunc, webRoot: string, server: Rem.Server) =
             async {
                 try
                     use reader = new StreamReader(context.Request.Body)
+                    let session = new OwinCookieUserSession(context)
+                    let uri = context.Request.Uri
+                    let ctx =
+                        { new Web.IContext with
+                            member this.UserSession = session :> _
+                            member this.RequestUri = uri
+                            member this.RootFolder = webRoot }
                     let! body = reader.ReadToEndAsync() |> Async.AwaitTask
                     let! resp =
-                        server.WithContext(fun _ ->
-                            let session = new OwinCookieUserSession(context)
-                            let uri = context.Request.Uri
+                        server.HandleRequest(
                             {
-                                new Web.IContext with
-                                    member this.UserSession = session :> _
-                                    member this.RequestUri = uri
-                                    member this.RootFolder = webRoot
-                            }
-                        ).HandleRequest {
-                            Body = body
-                            Headers = getHeader
-                        }
+                                Body = body
+                                Headers = getHeader
+                            }, ctx)
                     context.Response.StatusCode <- 200
                     context.Response.ContentType <- resp.ContentType
                     context.Response.Write(resp.Content)

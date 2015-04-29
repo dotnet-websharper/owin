@@ -184,7 +184,7 @@ module private Internal =
 
     // Store WebSharper user identity in the environment dictionary,
     // avoid overwriting principal set by OWIN authentication middleware
-    let [<Literal>] WebSharperUserKey = "WebSharperUser"
+    let [<Literal>] WebSharperUserKey = "WebSharper.User"
 
     type OwinCookieUserSession(ctx: IOwinContext) =
 
@@ -198,7 +198,7 @@ module private Internal =
             |> ignore 
 
         let ensureUserHasBeenRefreshed () = 
-            if ctx.Get(WebSharperUserKey) = null then 
+            if ctx.Environment.ContainsKey(WebSharperUserKey) |> not then 
                 // Using `try ... with` because `FormsAuthentication.Decrypt`
                 // throws an exception when there is a cookie but its format is invalid
                 try refresh ctx.Request.Cookies.[FormsAuthentication.FormsCookieName]

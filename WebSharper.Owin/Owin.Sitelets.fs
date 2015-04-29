@@ -54,6 +54,8 @@ module private Internal =
     open System.Reflection
     open HttpMultipartParser
 
+    let [<Literal>] OwinContextKey = "OwinContext"
+
     type FormData =
         {
             Files : seq<HttpPostedFileBase>
@@ -180,20 +182,27 @@ module private Internal =
                 |> Res.RenderLink
         }
 
+    // Store WebSharper user identity in the environment dictionary,
+    // avoid overwriting principal set by OWIN authentication middleware
+    let [<Literal>] WebSharperUserKey = "WebSharper.User"
+
     type OwinCookieUserSession(ctx: IOwinContext) =
 
         let refresh (cookie: string) =
             match cookie with
-            | null -> ctx.Authentication.User <- null
+            | null -> ctx.Set(WebSharperUserKey, None)
             | cookie ->
                 let ticket = FormsAuthentication.Decrypt cookie
                 let principal = GenericPrincipal(FormsIdentity(ticket), [||])
-                ctx.Authentication.User <- principal
+                ctx.Set(WebSharperUserKey, Some principal)
+            |> ignore 
 
-        do  // Using `try ... with` because `FormsAuthentication.Decrypt`
-            // throws an exception when there is a cookie but its format is invalid
-            try refresh ctx.Request.Cookies.[FormsAuthentication.FormsCookieName]
-            with _ -> refresh null
+        let ensureUserHasBeenRefreshed () = 
+            if ctx.Environment.ContainsKey(WebSharperUserKey) |> not then 
+                // Using `try ... with` because `FormsAuthentication.Decrypt`
+                // throws an exception when there is a cookie but its format is invalid
+                try refresh ctx.Request.Cookies.[FormsAuthentication.FormsCookieName]
+                with _ -> refresh null
 
         interface IUserSession with
 
@@ -201,9 +210,10 @@ module private Internal =
 
             member this.GetLoggedInUser() =
                 async {
-                    match ctx.Authentication.User with
-                    | null -> return None
-                    | x ->
+                    ensureUserHasBeenRefreshed()
+                    match ctx.Get<GenericPrincipal option>(WebSharperUserKey) with
+                    | None -> return None
+                    | Some x ->
                         if x.Identity.IsAuthenticated then
                             return Some x.Identity.Name
                         else return None
@@ -379,7 +389,8 @@ type RemotingMiddleware(next: AppFunc, webRoot: string, server: Rem.Server) =
                         { new Web.IContext with
                             member this.UserSession = session :> _
                             member this.RequestUri = uri
-                            member this.RootFolder = webRoot }
+                            member this.RootFolder = webRoot
+                            member this.Environment = upcast Map.ofList [(OwinContextKey, context :> obj)]}
                     let! body = reader.ReadToEndAsync() |> Async.AwaitTask
                     let! resp =
                         server.HandleRequest(

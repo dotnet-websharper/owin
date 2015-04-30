@@ -285,6 +285,7 @@ module private Internal =
                         p ++ loc
             {
                 ApplicationPath = appPath
+                Environment = Map.ofList [(OwinContextKey, context :> obj)]
                 Link = link
                 Json = json
                 Metadata = info

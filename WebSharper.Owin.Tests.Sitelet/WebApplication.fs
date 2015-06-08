@@ -170,6 +170,7 @@ module Server =
                             yield A [HRef (ctx.Link Index)] -< [Text "Back to home"]
                         ] }
 
+    [<Website>]
     let Sitelet =
         Sitelet.Sum [
             Sitelet.Content "/" Index IndexPage

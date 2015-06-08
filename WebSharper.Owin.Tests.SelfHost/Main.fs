@@ -17,13 +17,13 @@ module SelfHostedServer =
     let Main args =
         if args.Length = 1 then
             let url = "http://localhost:9000/"
-            let workingDirectory = args.[0]
+            let workingDirectory = Path.Combine(Directory.GetCurrentDirectory(), args.[0])
             try
                 use server = WebApp.Start(url, fun appB ->
                     appB.UseStaticFiles(
                             StaticFileOptions(
                                 FileSystem = PhysicalFileSystem(workingDirectory)))
-                        .UseSitelet(workingDirectory, Server.Sitelet)
+                        .UseDiscoveredSitelet(workingDirectory)
                     |> ignore)
                 stdout.WriteLine("Serving {0}", url)
                 stdin.ReadLine() |> ignore

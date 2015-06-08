@@ -459,21 +459,17 @@ type SiteletMiddleware<'T when 'T : equality>(next: AppFunc, config: Options, si
         let binDirectory = defaultArg binDirectory (Path.Combine(webRoot, "bin"))
         let binDir = DirectoryInfo(binDirectory)
         let ok =
-            binDir.DiscoverAssemblies()
-            |> Seq.choose (fun p ->
-                try Some (Assembly.LoadFileInfo(p))
-                with e -> None)
-            |> Array.ofSeq
-            |> Seq.tryPick (fun assem ->
-                let aT = typeof<WebsiteAttribute>
-                match Attribute.GetCustomAttribute(assem, aT) with
-                | :? WebsiteAttribute as attr ->
-                    let (sitelet, actions) = attr.Run()
+            try
+                binDir.DiscoverAssemblies()
+                |> Seq.choose (fun p ->
+                    try Some (Assembly.LoadFileInfo(p))
+                    with e -> None)
+                |> HttpModule.DiscoverSitelet
+                |> Option.map (fun sitelet ->
                     let options = Options.Create(webRoot, binDirectory = binDirectory)
-                    fun next ->
-                        SiteletMiddleware<obj>(next, options, sitelet)
-                    |> Some
-                | _ -> None)
+                    fun next -> SiteletMiddleware<obj>(next, options, sitelet))
+            with :? System.Reflection.ReflectionTypeLoadException as exn ->
+                failwithf "%A" (exn.LoaderExceptions)
         match ok with
         | Some this -> this
         | None -> failwith "Failed to discover sitelet assemblies"

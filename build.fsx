@@ -31,6 +31,7 @@ let testSitelet =
         .SourcesFromProject()
         .References(fun r ->
             [
+                r.NuGet("WebSharper.ChartJs").Reference()
                 r.Project(multipartParser)
                 r.Project(main)
             ])

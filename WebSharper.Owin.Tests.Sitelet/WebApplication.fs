@@ -23,66 +23,108 @@ module Rpc =
             return ()
         }
 
+[<JavaScript>]
 module Client =
 
     open WebSharper.Html.Client
     open WebSharper.JavaScript
-
-    [<JavaScript>]
+    
     let test = 42
 
-    type Control() =
-        inherit Web.Control()
+    let Main() =
+        Div [
+            P [Text ("Client-side value: " + string test)]
+            P [
+                Span [Text "Value retrieved from the server: "]
+                Span []
+                |>! OnAfterRender (fun span ->
+                    async {
+                        let! x = Rpc.GetValue()
+                        span.Text <- x
+                    }
+                    |> Async.Start
+                )
+            ]
+        ]
 
-        [<JavaScript>]
-        override this.Body =
-            Div [
-                P [Text ("Client-side value: " + string test)]
-                P [
-                    Span [Text "Value retrieved from the server: "]
-                    Span []
-                    |>! OnAfterRender (fun span ->
-                        async {
-                            let! x = Rpc.GetValue()
-                            span.Text <- x
-                        }
-                        |> Async.Start
+    let Logout loggedInAs =
+        Div [
+            Span [Text ("Logged in as " + loggedInAs)]
+            Button [Text "Log out"]
+            |>! OnClick (fun _ _ ->
+                async {
+                    do! Rpc.Logout()
+                    return JS.Window.Location.Reload()
+                } |> Async.Start)
+        ]
+
+    let Login() =
+        let input = Input []
+        Div [
+            input
+            Button [Text "Log in"]
+            |>! OnClick (fun _ _ ->
+                async {
+                    do! Rpc.LoginAs input.Value
+                    return JS.Window.Location.Reload()
+                } |> Async.Start)
+        ]
+
+    open WebSharper.ChartJs
+
+    let Chart () =
+        JavaScript.Array<string>() |> ignore
+
+        let n = ref 10
+
+        let chart : Chart.LineChart option ref = ref None
+        
+        let Push (chart : Chart.LineChart) (value : float) =
+//        let Push (value : float) =
+//            let chart = (!chart).Value
+            chart.RemoveData()
+            chart.AddData([| float value |], string (!n + 1)) 
+            n := !n + 1
+
+        let initialData =
+            [| for x in 1 .. !n do
+                    yield (string x, Math.Random()) |]
+
+        Div [
+            Canvas [
+                Width  "1200"
+                Height "400"
+            ]
+            |>! OnAfterRender (fun canvas ->
+                let canvas = As<CanvasElement> canvas.Body
+                let (labels, dataset) =
+                    Array.unzip initialData
+
+                let data =
+                    LineChartData(
+                        Labels   = labels,
+                        Datasets = [| LineChartDataset(Data = dataset) |]
                     )
-                ]
-            ] :> _
 
-    type LogoutControl(loggedInAs) =
-        inherit Web.Control()
+                Chart.Defaults.ShowTooltips <- false
 
-        [<JavaScript>]
-        override this.Body =
+                let options =
+                    LineChartConfiguration(
+                        BezierCurve = false,
+                        DatasetFill = false
+                    )
+
+                chart := Some <| Chart(canvas.GetContext "2d").Line(data, options)
+            )
+
             Div [
-                Span [Text ("Logged in as " + loggedInAs)]
-                Button [Text "Log out"]
+                Button [ Text "Push" ]
                 |>! OnClick (fun _ _ ->
-                    async {
-                        do! Rpc.Logout()
-                        return JS.Window.Location.Reload()
-                    } |> Async.Start)
+                    Push (!chart).Value <| Math.Random()
+//                    Push <| Math.Random()
+                )
             ]
-            :> _
-
-    type LoginControl() =
-        inherit Web.Control()
-
-        [<JavaScript>]
-        override this.Body =
-            let input = Input []
-            Div [
-                input
-                Button [Text "Log in"]
-                |>! OnClick (fun _ _ ->
-                    async {
-                        do! Rpc.LoginAs input.Value
-                        return JS.Window.Location.Reload()
-                    } |> Async.Start)
-            ]
-            :> _
+        ] 
 
 module Server =
 
@@ -98,8 +140,8 @@ module Server =
         async {
             let! loggedIn = ctx.UserSession.GetLoggedInUser()
             match loggedIn with
-            | Some u -> return Div [new Client.LogoutControl(u)]
-            | None -> return Div [new Client.LoginControl()]
+            | Some u -> return Div [ClientSide <@ Client.Logout u @>]
+            | None -> return Div [ClientSide <@ Client.Login() @>]
         }
 
     let IndexPage =
@@ -116,7 +158,7 @@ module Server =
                             LI [A [HRef (ctx.Link (Article 2))] -< [Text "Article 2"]]
                         ]
                         H2 [Text "Client-side control:"]
-                        Div [new Client.Control()]
+                        Div [ClientSide <@ Client.Main() @>]
                         H2 [Text "Form to test multipart/form-data management"]
                         Form [
                             Attr.Action (ctx.Link Upload)
@@ -130,6 +172,8 @@ module Server =
                             Div [Input [Type "file"; Name "thefile"]]
                             Div [Input [Type "submit"]]
                         ]
+                        H2 [Text "Charting demo:"]
+                        Div [ClientSide <@ Client.Chart() @>]
                     ] }
         }
 

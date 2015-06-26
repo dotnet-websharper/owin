@@ -37,6 +37,9 @@ type Options =
     /// Sets whether the WebSharper Remoting service should be run.
     member WithRunRemoting : bool -> Options
 
+    /// Exposes the Json encoder/decoder based on loaded WebSharper metadata
+    member Json : Core.Json.Provider
+
 type Env = IDictionary<string, obj>
 type AppFunc = Func<Env, Task>
 type MidFunc = Func<AppFunc, AppFunc>

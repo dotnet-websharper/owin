@@ -36,6 +36,7 @@ type Options =
     member o.WithDebug(d) = { o with Debug = d }
     member o.WithServerRootDirectory(d) = { o with ServerRootDirectory = d }
     member o.WithUrlPrefix(t) = { o with UrlPrefix = t }
+    member o.Json = o.JsonProvider 
 
     static member Create() =
         let dir = System.IO.Directory.GetCurrentDirectory()
@@ -346,13 +347,14 @@ type Options with
 
     static member Create(meta) =
         let dir = System.IO.Directory.GetCurrentDirectory()
+        let remotingServer = Rem.Server.Create None meta
         {
             Debug = false
-            JsonProvider = Core.Json.Provider.CreateTyped(meta)
+            JsonProvider = remotingServer.JsonProvider
             Metadata = meta
             ServerRootDirectory = dir
             UrlPrefix = ""
-            RemotingServer = Some (Rem.Server.Create None meta)
+            RemotingServer = Some remotingServer
         }
 
     member o.WithRunRemoting(b) =

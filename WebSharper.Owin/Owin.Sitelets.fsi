@@ -37,9 +37,6 @@ type Options =
     /// Sets whether the WebSharper Remoting service should be run.
     member WithRunRemoting : bool -> Options
 
-    /// Exposes the Json encoder/decoder based on loaded WebSharper metadata
-    member Json : Core.Json.Provider
-
 type Env = IDictionary<string, obj>
 type AppFunc = Func<Env, Task>
 type MidFunc = Func<AppFunc, AppFunc>
@@ -85,6 +82,21 @@ type SiteletMiddleware<'T when 'T : equality> =
     /// Also runs the Remoting service using metadata discovered from binDirectory.
     /// If binDirectory is not specified, webRoot/bin is used.
     static member AsMidFunc : webRoot: string * ?binDirectory: string -> MidFunc
+
+type WebSharperOptions<'T when 'T: equality> =
+    new : unit -> WebSharperOptions<'T>  
+
+    member ServerRootDirectory : string with get, set
+
+    member BinDirectory : string with get, set
+    member UseRemoting : bool with get, set
+    member UrlPrefix : string with get, set
+    member Debug : bool with get, set
+    member Sitelet : option<Sitelet<'T>> with get, set
+    member DiscoverSitelet : bool with get, set
+
+    member WithSitelet : Sitelet<'T> -> WebSharperOptions<'T>
+    member WithInitAction : (global.Owin.IAppBuilder * WebSharper.Core.Json.Provider -> unit)  -> WebSharperOptions<'T>
 
 [<AutoOpen>]
 module Extensions =
@@ -140,3 +152,5 @@ module Extensions =
         /// methods UseDiscoveredSitelet and UseSitelet, as well as
         /// UseCustomSitelet if options.RunRemoting is set to true.
         member UseWebSharperRemoting : webRoot: string * M.Info -> IAppBuilder
+
+        member UseWebSharper : options:WebSharperOptions<'T> -> IAppBuilder

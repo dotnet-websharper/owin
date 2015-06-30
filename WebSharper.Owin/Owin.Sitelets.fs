@@ -23,7 +23,7 @@ type AppFunc = Func<Env, Task>
 type MidFunc = Func<AppFunc, AppFunc>
 
 type Options =
-    private {
+    internal {
         Debug : bool
         JsonProvider : Core.Json.Provider
         Metadata : M.Info
@@ -36,7 +36,6 @@ type Options =
     member o.WithDebug(d) = { o with Debug = d }
     member o.WithServerRootDirectory(d) = { o with ServerRootDirectory = d }
     member o.WithUrlPrefix(t) = { o with UrlPrefix = t }
-    member o.Json = o.JsonProvider 
 
     static member Create() =
         let dir = System.IO.Directory.GetCurrentDirectory()
@@ -476,9 +475,88 @@ type SiteletMiddleware<'T when 'T : equality>(next: AppFunc, config: Options, si
         | Some this -> this
         | None -> failwith "Failed to discover sitelet assemblies"
 
+    static member UseDiscoveredSitelet(config: Options, binDirectory: string) =
+        let binDir = DirectoryInfo(binDirectory)
+        let ok =
+            try
+                binDir.DiscoverAssemblies()
+                |> Seq.choose (fun p ->
+                    try Some (Assembly.LoadFileInfo(p))
+                    with e -> None)
+                |> HttpModule.DiscoverSitelet
+                |> Option.map (fun sitelet ->
+                    fun next -> SiteletMiddleware<obj>(next, config, sitelet))
+            with :? System.Reflection.ReflectionTypeLoadException as exn ->
+                failwithf "%A" (exn.LoaderExceptions)
+        match ok with
+        | Some this -> this
+        | None -> failwith "Failed to discover sitelet assemblies"
+
     static member AsMidFunc(webRoot: string, ?binDirectory: string) =
         let mw = SiteletMiddleware<obj>.UseDiscoveredSitelet(webRoot, ?binDirectory = binDirectory)
         MidFunc(fun next -> AppFunc(mw(next).Invoke))
+
+type WebSharperOptions<'T when 'T : equality>() = 
+    let mutable binDir = None
+    let mutable initActions = []
+
+    member val ServerRootDirectory = System.IO.Directory.GetCurrentDirectory() with get, set
+    member this.BinDirectory
+        with get () = 
+            match binDir with
+            | None -> System.IO.Path.Combine(this.ServerRootDirectory, "bin")
+            | Some d -> d
+        and set dir = binDir <- Some dir
+
+    member val UseRemoting = true with get, set
+    member val UrlPrefix = "" with get, set
+    member val Debug = false with get, set
+    member val Sitelet = None with get, set
+    member val DiscoverSitelet = false with get, set
+    
+    member internal this.InitActions = initActions
+
+    member this.WithSitelet(sitelet: Sitelet<'T>) =
+        this.Sitelet <- Some sitelet 
+        this
+
+    member this.WithInitAction(action) = 
+        initActions <- action :: initActions   
+        this  
+
+    member internal this.Run(builder: IAppBuilder) =
+        let meta = 
+            if this.UseRemoting || Option.isSome this.Sitelet || this.DiscoverSitelet then
+                M.Info.LoadFromBinDirectory(this.BinDirectory)
+            else
+                M.Info.Create([])
+             
+        let remotingServer, jsonProvider =
+            if this.UseRemoting then
+                let rem = Rem.Server.Create None meta
+                Some rem, rem.JsonProvider
+            else None, Core.Json.Provider.Create()
+
+        let config = {
+            Debug = this.Debug
+            JsonProvider = jsonProvider
+            Metadata = meta
+            ServerRootDirectory = this.ServerRootDirectory
+            UrlPrefix = this.UrlPrefix
+            RemotingServer = remotingServer
+        }
+
+        match this.Sitelet with
+        | Some sitelet -> builder.Use(SiteletMiddleware<'T>.AsMidFunc(config, sitelet)) |> ignore
+        | _ ->
+            if this.DiscoverSitelet then
+                let mw = SiteletMiddleware<obj>.UseDiscoveredSitelet(config, this.BinDirectory)
+                builder.Use(MidFunc(fun next -> AppFunc(mw(next).Invoke))) |> ignore
+            elif this.UseRemoting then
+                builder.Use(RemotingMiddleware.AsMidFunc(config)) |> ignore    
+
+        for a in this.InitActions do
+            a(builder, jsonProvider)
 
 [<AutoOpen>]
 module Extensions =
@@ -504,3 +582,7 @@ module Extensions =
 
         member this.UseDiscoveredSitelet(webRoot: string, ?binDirectory) =
             this.Use(SiteletMiddleware<obj>.AsMidFunc(webRoot, ?binDirectory = binDirectory))
+
+        member this.UseWebSharper(options: WebSharperOptions<'T>) =
+            options.Run(this)
+            this

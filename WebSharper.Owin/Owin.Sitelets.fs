@@ -149,13 +149,16 @@ module private Internal =
 
     module W2O =
 
-        let WriteResponse (resp: Http.Response) (out: IOwinResponse) =
-            out.StatusCode <- resp.Status.Code
-            for name, hs in resp.Headers |> Seq.groupBy (fun h -> h.Name) do
-                out.Headers.Add(name, [| for h in hs -> h.Value |])
-            let str = new MemoryStream()
-            resp.WriteBody(str :> _)
-            out.WriteAsync(str.ToArray())
+        let WriteResponse (resp: Task<Http.Response>) (out: IOwinResponse) =
+            resp.ContinueWith(fun (t: Task<Http.Response>) ->
+                let resp = t.Result
+                out.StatusCode <- resp.Status.Code
+                for name, hs in resp.Headers |> Seq.groupBy (fun h -> h.Name) do
+                    out.Headers.Add(name, [| for h in hs -> h.Value |])
+                let str = new MemoryStream()
+                resp.WriteBody(str :> _)
+                out.Write(str.ToArray())
+            )
 
     let buildResourceContext cfg (context: IOwinContext) : Res.Context =
         let isDebug = cfg.Debug
@@ -303,7 +306,7 @@ module private Internal =
             s.Router.Route(request)
             |> Option.map (fun action ->
                 let content = s.Controller.Handle(action)
-                let response = Content.ToResponse content ctx
+                let response = Content.ToResponse content ctx |> Async.StartAsTask
                 W2O.WriteResponse response context.Response)
         with e ->
             context.Response.StatusCode <- 500

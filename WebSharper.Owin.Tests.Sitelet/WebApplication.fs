@@ -102,11 +102,10 @@ module Server =
             | None -> return Div [new Client.LoginControl()]
         }
 
-    let IndexPage =
-        Content.PageContentAsync <| fun ctx -> async {
+    let IndexPage ctx =
+        async {
             let! header = Header ctx
-            return {
-              Page.Default with
+            return! Content.Page(
                 Body =
                     [
                         header
@@ -130,52 +129,51 @@ module Server =
                             Div [Input [Type "file"; Name "thefile"]]
                             Div [Input [Type "submit"]]
                         ]
-                    ] }
+                    ]
+            )
         }
 
-    let ArticlePage articleId =
-        Content.PageContent <| fun ctx ->
-            { Page.Default with
-                Body =
-                    [
-                        H1 [Text ("Article " + string articleId)]
-                        P [Text "Hello world! Now I just need to add some content..."]
-                        P [A [HRef (ctx.Link Index)] -< [Text "Back to home"]]
-                    ] }
+    let ArticlePage articleId ctx =
+        Content.Page(
+            Body =
+                [
+                    H1 [Text ("Article " + string articleId)]
+                    P [Text "Hello world! Now I just need to add some content..."]
+                    P [A [HRef (ctx.Link Index)] -< [Text "Back to home"]]
+                ]
+        )
 
-    let UploadPage =
-        Content.PageContent <| fun ctx ->
-            match Array.ofSeq ctx.Request.Files with
-            | [||] ->
-                { Page.Default with
-                    Body =
-                        [
-                            Text "No file uploaded. "
-                            A [HRef (ctx.Link Index)] -< [Text "Back to home"]
-                        ] }
-            | files ->
-                let name = defaultArg ctx.Request.Post.["name"] "(not provided)"
-                let body =
-                    files |> Array.map (fun f ->
-                        let text = sprintf "Uploaded file: '%s', %i B" f.FileName f.ContentLength
-                        printfn "%s" text
-                        use r = new System.IO.StreamReader(f.InputStream)
-                        printfn "%s" (r.ReadToEnd())
-                        P [Text text])
-                { Page.Default with
-                    Body =
-                        [
-                            yield P [Text ("Your name is " + name)]
-                            yield! body
-                            yield A [HRef (ctx.Link Index)] -< [Text "Back to home"]
-                        ] }
+    let UploadPage ctx =
+        Content.Page(
+            Body =
+                match Array.ofSeq ctx.Request.Files with
+                | [||] ->
+                    [
+                        Text "No file uploaded. "
+                        A [HRef (ctx.Link Index)] -< [Text "Back to home"]
+                    ]
+                | files ->
+                    let name = defaultArg ctx.Request.Post.["name"] "(not provided)"
+                    let body =
+                        files |> Array.map (fun f ->
+                            let text = sprintf "Uploaded file: '%s', %i B" f.FileName f.ContentLength
+                            printfn "%s" text
+                            use r = new System.IO.StreamReader(f.InputStream)
+                            printfn "%s" (r.ReadToEnd())
+                            P [Text text])
+                    [
+                        yield P [Text ("Your name is " + name)]
+                        yield! body
+                        yield A [HRef (ctx.Link Index)] -< [Text "Back to home"]
+                    ]
+        )
 
     [<Website>]
     let Sitelet =
         Sitelet.Sum [
             Sitelet.Content "/" Index IndexPage
-            Sitelet.Infer <| function
-                | Index -> IndexPage
-                | Article n -> ArticlePage n
-                | Upload -> UploadPage
+            Sitelet.Infer <| fun ctx -> function
+                | Index -> IndexPage ctx
+                | Article n -> ArticlePage n ctx
+                | Upload -> UploadPage ctx
         ]

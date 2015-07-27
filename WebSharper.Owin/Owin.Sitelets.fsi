@@ -83,6 +83,21 @@ type SiteletMiddleware<'T when 'T : equality> =
     /// If binDirectory is not specified, webRoot/bin is used.
     static member AsMidFunc : webRoot: string * ?binDirectory: string -> MidFunc
 
+type WebSharperOptions<'T when 'T: equality> =
+    new : unit -> WebSharperOptions<'T>  
+
+    member ServerRootDirectory : string with get, set
+
+    member BinDirectory : string with get, set
+    member UseRemoting : bool with get, set
+    member UrlPrefix : string with get, set
+    member Debug : bool with get, set
+    member Sitelet : option<Sitelet<'T>> with get, set
+    member DiscoverSitelet : bool with get, set
+
+    member WithSitelet : Sitelet<'T> -> WebSharperOptions<'T>
+    member WithInitAction : (global.Owin.IAppBuilder * WebSharper.Core.Json.Provider -> unit)  -> WebSharperOptions<'T>
+
 [<AutoOpen>]
 module Extensions =
 
@@ -137,3 +152,5 @@ module Extensions =
         /// methods UseDiscoveredSitelet and UseSitelet, as well as
         /// UseCustomSitelet if options.RunRemoting is set to true.
         member UseWebSharperRemoting : webRoot: string * M.Info -> IAppBuilder
+
+        member UseWebSharper : options:WebSharperOptions<'T> -> IAppBuilder

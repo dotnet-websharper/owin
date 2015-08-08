@@ -151,13 +151,17 @@ module private Internal =
 
         let WriteResponse (resp: Task<Http.Response>) (out: IOwinResponse) =
             resp.ContinueWith(fun (t: Task<Http.Response>) ->
-                let resp = t.Result
-                out.StatusCode <- resp.Status.Code
-                for name, hs in resp.Headers |> Seq.groupBy (fun h -> h.Name) do
-                    out.Headers.Add(name, [| for h in hs -> h.Value |])
-                let str = new MemoryStream()
-                resp.WriteBody(str :> _)
-                out.Write(str.ToArray())
+                match t.Exception with
+                | null ->
+                    let resp = t.Result
+                    out.StatusCode <- resp.Status.Code
+                    for name, hs in resp.Headers |> Seq.groupBy (fun h -> h.Name) do
+                        out.Headers.Add(name, [| for h in hs -> h.Value |])
+                    let str = new MemoryStream()
+                    resp.WriteBody(str :> _)
+                    out.Write(str.ToArray())
+                | e ->
+                    out.Write(sprintf "%A" e)
             )
 
     let buildResourceContext cfg (context: IOwinContext) : Res.Context =

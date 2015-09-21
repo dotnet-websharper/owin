@@ -11,14 +11,17 @@ module M = WebSharper.Core.Metadata
 [<Sealed>]
 type Options =
     /// Creates empty sitelet server options.
+    [<System.Obsolete "Use WebSharperOptions.">]
     static member Create : unit -> Options
 
     /// Creates sitelet server options with the given WebSharper metadata.
+    [<System.Obsolete "Use WebSharperOptions.">]
     static member Create : M.Info -> Options
 
     /// Creates sitelet server options using webRoot as the root folder and
     /// loading WebSharper metadata from assemblies in binDirectory.
     /// If binDirectory is not specified, webRoot/bin is used.
+    [<System.Obsolete "Use WebSharperOptions.">]
     static member Create : webRoot: string * ?binDirectory: string -> Options
 
     /// Enables debugging (including using uncompressed JavaScript files).
@@ -83,19 +86,42 @@ type SiteletMiddleware<'T when 'T : equality> =
     /// If binDirectory is not specified, webRoot/bin is used.
     static member AsMidFunc : webRoot: string * ?binDirectory: string -> MidFunc
 
+/// Options to initialize WebSharper with IAppBuilder.UseWebSharper.
 type WebSharperOptions<'T when 'T: equality> =
     new : unit -> WebSharperOptions<'T>  
 
+    /// Get or set the web application's root directory.
+    /// Default: the current working directory.
     member ServerRootDirectory : string with get, set
 
+    /// Get or set the web application's binary directory.
+    /// Default: the "bin" subdirectory of ServerRootDirectory.
     member BinDirectory : string with get, set
+
+    /// Whether to serve WebSharper RPC functions.
+    /// Default: true.
     member UseRemoting : bool with get, set
+
+    /// The URL prefix under which sitelets are served.
+    /// Default: empty.
     member UrlPrefix : string with get, set
+
+    /// Whether to serve JavaScript and CSS in debug mode (ie. uncompressed).
+    /// Default: false.
     member Debug : bool with get, set
+
+    /// The sitelet to serve.
+    /// Default: None.
     member Sitelet : option<Sitelet<'T>> with get, set
+
+    /// Whether to search assemblies for a sitelet to serve if Sitelet is set to None.
+    /// Default: false.
     member DiscoverSitelet : bool with get, set
 
+    /// Set the sitelet to serve.
     member WithSitelet : Sitelet<'T> -> WebSharperOptions<'T>
+
+    /// Add an action to run on startup.
     member WithInitAction : (global.Owin.IAppBuilder * WebSharper.Core.Json.Provider -> unit)  -> WebSharperOptions<'T>
 
 [<AutoOpen>]
@@ -117,6 +143,7 @@ module Extensions =
         member UseSitelet : webRoot: string * Sitelet<'T> * ?binDirectory: string -> IAppBuilder
 
         /// Runs the provided Sitelet with the provided options.
+        [<System.Obsolete "Use UseWebSharper(options)">]
         member UseCustomSitelet : Options * Sitelet<'T> -> IAppBuilder
 
         /// Runs the WebSharper Remoting service, allowing WebSharper-compiled

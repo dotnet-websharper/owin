@@ -503,6 +503,8 @@ type SiteletMiddleware<'T when 'T : equality>(next: AppFunc, config: Options, si
         let mw = SiteletMiddleware<obj>.UseDiscoveredSitelet(webRoot, ?binDirectory = binDirectory)
         MidFunc(fun next -> AppFunc(mw(next).Invoke))
 
+type InitAction = Owin.IAppBuilder * WebSharper.Core.Json.Provider * (IOwinContext -> Web.IContext) -> unit
+
 type WebSharperOptions<'T when 'T : equality>() = 
     let mutable binDir = None
     let mutable initActions = []
@@ -562,8 +564,18 @@ type WebSharperOptions<'T when 'T : equality>() =
             elif this.UseRemoting then
                 builder.Use(RemotingMiddleware.AsMidFunc(config)) |> ignore    
 
-        for a in this.InitActions do
-            a(builder, jsonProvider)
+        if not (List.isEmpty this.InitActions) then
+            let mkCtx (context: IOwinContext) =
+                let env = Map.ofList [(OwinContextKey, context :> obj)]
+                let session = new OwinCookieUserSession(context)
+                { new IContext with
+                    member ctx.Environment = env :> _
+                    member ctx.RequestUri = context.Request.Uri
+                    member ctx.RootFolder = this.ServerRootDirectory
+                    member ctx.UserSession = session :> _
+                }
+            for a in this.InitActions do
+                a(builder, jsonProvider, mkCtx)
 
 [<AutoOpen>]
 module Extensions =

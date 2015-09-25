@@ -135,9 +135,20 @@ module private Internal =
 
         let Request (req: IOwinRequest) : Http.Request =
             let formData = ParseMultiPartFormData req
+            let uri =
+                match req.PathBase.Value with
+                | "" | "/" -> req.Uri
+                | pathBase ->
+                    if req.Uri.IsAbsoluteUri then
+                        let uB = UriBuilder req.Uri
+                        if uB.Path.StartsWith pathBase then
+                            uB.Path <- uB.Path.Substring pathBase.Length
+                        uB.Uri
+                    else
+                        req.Uri
             {
                 Method = Method req.Method
-                Uri = req.Uri
+                Uri = uri
                 Headers = Headers req.Headers
                 Post = formData.Fields
                 Get = Query req.Query

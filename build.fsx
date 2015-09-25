@@ -23,7 +23,11 @@ let main =
             [
                 r.Project(multipartParser)
                 r.NuGet("Owin").ForceFoundVersion().Reference()
-                r.NuGet("Microsoft.Owin").ForceFoundVersion().Reference()
+                r.NuGet("Arachne.Core").Version("2.3.27-b066", allowPreRelease = true).Reference()
+                r.NuGet("Arachne.Language").Version("2.3.27-b066", allowPreRelease = true).Reference()
+                r.NuGet("Arachne.Http").Version("2.3.27-b066", allowPreRelease = true).Reference()
+                r.NuGet("Arachne.Http.State").Version("2.3.27-b066", allowPreRelease = true).Reference()
+                r.NuGet("Arachne.Uri").Version("2.3.27-b066", allowPreRelease = true).Reference()
                 r.Assembly("System.Configuration")
                 r.Assembly "System.Web"
             ])

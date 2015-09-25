@@ -3,7 +3,6 @@
 open System
 open System.Collections.Generic
 open System.Threading.Tasks
-open Microsoft.Owin
 open WebSharper
 open WebSharper.Sitelets
 module M = WebSharper.Core.Metadata
@@ -87,7 +86,7 @@ type SiteletMiddleware<'T when 'T : equality> =
     /// If binDirectory is not specified, webRoot/bin is used.
     static member AsMidFunc : webRoot: string * ?binDirectory: string -> MidFunc
 
-type InitAction = Owin.IAppBuilder * WebSharper.Core.Json.Provider * (IOwinContext -> Web.IContext) -> unit
+type InitAction = Owin.IAppBuilder * WebSharper.Core.Json.Provider * (Env -> Web.IContext) -> unit
 
 /// Options to initialize WebSharper with IAppBuilder.UseWebSharper.
 type WebSharperOptions<'T when 'T: equality> =

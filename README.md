@@ -7,7 +7,7 @@ specification](http://owin.org/spec/spec/owin-1.0.0.html), WebSharper
 is a Web Framework and WebSharper.Owin is an adapter layer for it.
 
 After adding the reference to the project all the classes can be found
-under the `IntelliFactory.WebSharper.Owin` module.
+under the `WebSharper.Owin` module.
 
 # Usage
 
@@ -61,7 +61,7 @@ from NuGet as `Microsoft.Owin.StaticFiles`, as follows:
 open global.Owin
 open Microsoft.Owin.StaticFiles
 open Microsoft.Owin.FileSystems
-open IntelliFactory.WebSharper.Owin
+open WebSharper.Owin
 
 let RunSitelet (appB: IAppBuilder) mySitelet rootFolder =
     appB.UseStaticFiles(

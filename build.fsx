@@ -4,6 +4,8 @@ open IntelliFactory.Build
 let bt =
     BuildTool().PackageId("WebSharper.Owin")
         .VersionFrom("WebSharper")
+        .WithFSharpVersion(FSharpVersion.FSharp30)
+        .WithFramework(fun fw -> fw.Net45)
 
 let multipartParser =
     bt.MSBuild("HttpMultipartParser/HttpMultipartParser.csproj")
@@ -20,8 +22,8 @@ let main =
         .References(fun r ->
             [
                 r.Project(multipartParser)
-                r.NuGet("Owin").Reference()
-                r.NuGet("Microsoft.Owin").Reference()
+                r.NuGet("Owin").ForceFoundVersion().Reference()
+                r.NuGet("Microsoft.Owin").ForceFoundVersion().Reference()
                 r.Assembly("System.Configuration")
                 r.Assembly "System.Web"
             ])
@@ -33,6 +35,7 @@ let testSitelet =
             [
                 r.Project(multipartParser)
                 r.Project(main)
+                r.NuGet("WebSharper.Html").Reference()
             ])
 
 let testHost =

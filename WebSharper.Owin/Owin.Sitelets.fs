@@ -9,7 +9,9 @@ open System.Threading.Tasks
 open System.Web
 open System.Web.Security
 open global.Owin
+open Arachne.Http
 open Arachne.Http.State
+open Arachne.Uri
 open WebSharper
 open WebSharper.Sitelets
 open WebSharper.Web
@@ -17,12 +19,12 @@ module Rem = WebSharper.Core.Remoting
 module Res = WebSharper.Core.Resources
 module P = WebSharper.PathConventions
 module M = WebSharper.Core.Metadata
+type Uri = System.Uri
 
 type Env = IDictionary<string, obj>
 type HeaderDictionary = IDictionary<string, string[]>
 type AppFunc = Func<Env, Task>
 type MidFunc = Func<AppFunc, AppFunc>
-type Q = Arachne.Uri.Query
 
 // TODO: Use Arachne or Freya.Core instead.
 module Environment =
@@ -131,8 +133,8 @@ module private Internal =
                         yield Http.Header.Custom k v
             }
 
-        let Query (query: Q) : Http.ParameterCollection =
-            match fst Q.Pairs_ query with
+        let Query (query: Arachne.Uri.Query) : Http.ParameterCollection =
+            match fst Arachne.Uri.Query.Pairs_ query with
             | Some qs ->
                 Http.ParameterCollection(
                     seq {
@@ -145,7 +147,7 @@ module private Internal =
         let tryFindCookieHeader (headers : HeaderDictionary) =
             if headers.ContainsKey("Cookie") then
                 headers.["Cookie"]
-                |> Array.map Cookie.Parse
+                |> Array.map Arachne.Http.State.Cookie.Parse
                 |> Some
             else None
 
@@ -154,7 +156,7 @@ module private Internal =
             match cookies with
             | Some cookies ->
                 for (Cookie cookie) in cookies do
-                    for Pair(Name k, Value v) in cookie do
+                    for Pair(State.Name k, Value v) in cookie do
                         coll.Add(HttpCookie(k, v))
                 coll
             | None -> coll
@@ -211,7 +213,7 @@ module private Internal =
                 Uri = uri
                 Headers = Headers headers
                 Post = formData.Fields
-                Get = Query (Q.Parse uri.Query)
+                Get = Query (Arachne.Uri.Query.Parse uri.Query)
                 Cookies = Cookies (tryFindCookieHeader headers)
                 ServerVariables = Http.ParameterCollection([])
                 Body = unbox req.["owin.RequestBody"]
@@ -304,7 +306,7 @@ module private Internal =
                             cookies
                             |> List.ofArray
                             |> List.collect (fun (Cookie pairs) -> pairs)
-                            |> List.tryFind (fun (Pair(Name k, _)) ->
+                            |> List.tryFind (fun (Pair(State.Name k, _)) ->
                                 k = FormsAuthentication.FormsCookieName)
                         match c with
                         | Some (Pair(_, Value v)) -> refresh v
@@ -333,7 +335,7 @@ module private Internal =
                     let cookie = FormsAuthentication.GetAuthCookie(user, persistent)
                     let setCookie =
                         SetCookie(
-                            Pair(Name cookie.Name, Value cookie.Value),
+                            Pair(State.Name cookie.Name, Value cookie.Value),
                             Attributes [
                                 if not (String.IsNullOrEmpty cookie.Domain) then yield Domain (Domain.Parse cookie.Domain)
                                 if persistent then yield Expires cookie.Expires
@@ -349,7 +351,7 @@ module private Internal =
                 async {
                     let setCookie =
                         SetCookie(
-                            Pair(Name FormsAuthentication.FormsCookieName, Value ""),
+                            Pair(State.Name FormsAuthentication.FormsCookieName, Value ""),
                             Attributes [ Expires (DateTime.Now.AddDays(-1.)) ])
                     Environment.appendHeader ("Set-Cookie", SetCookie.Format setCookie) responseHeaders
                     return refresh null

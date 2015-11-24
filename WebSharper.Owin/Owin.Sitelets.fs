@@ -536,6 +536,7 @@ type WebSharperOptions<'T when 'T : equality>() =
     member val Debug = false with get, set
     member val Sitelet = None with get, set
     member val DiscoverSitelet = false with get, set
+    member val Metadata = None with get, set
     
     member internal this.InitActions = initActions
 
@@ -549,10 +550,13 @@ type WebSharperOptions<'T when 'T : equality>() =
 
     member internal this.Run(builder: IAppBuilder) =
         let meta = 
-            if this.UseRemoting || Option.isSome this.Sitelet || this.DiscoverSitelet then
-                M.Info.LoadFromBinDirectory(this.BinDirectory)
-            else
-                M.Info.Create([])
+            match this.Metadata with
+            | Some m -> m
+            | None ->
+                if this.UseRemoting || Option.isSome this.Sitelet || this.DiscoverSitelet then
+                    M.Info.LoadFromBinDirectory(this.BinDirectory)
+                else
+                    M.Info.Create([])
              
         let remotingServer, jsonProvider =
             if this.UseRemoting then

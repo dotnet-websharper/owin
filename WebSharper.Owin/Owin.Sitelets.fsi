@@ -113,6 +113,11 @@ type WebSharperOptions<'T when 'T: equality> =
     /// Default: false.
     member Debug : bool with get, set
 
+    /// The metadata to use for client code.
+    /// If None, it will be loaded from BinDirectory.
+    /// Default: None.
+    member Metadata : option<M.Info> with get, set
+
     /// The sitelet to serve.
     /// Default: None.
     member Sitelet : option<Sitelet<'T>> with get, set

@@ -27,7 +27,7 @@ type AppFunc = Func<Env, Task>
 type MidFunc = Func<AppFunc, AppFunc>
 
 // TODO: Use Arachne or Freya.Core instead.
-module Environment =
+module private Environment =
     let getHost (env : Env) =
         let headers : HeaderDictionary = unbox env.["owin.RequestHeaders"]
         let host =
@@ -133,8 +133,8 @@ module private Internal =
                         yield Http.Header.Custom k v
             }
 
-        let Query (query: Arachne.Uri.Query) : Http.ParameterCollection =
-            match fst Arachne.Uri.Query.Pairs_ query with
+        let QueryParams (query: Query) : Http.ParameterCollection =
+            match fst Query.Pairs_ query with
             | Some qs ->
                 Http.ParameterCollection(
                     seq {
@@ -147,7 +147,7 @@ module private Internal =
         let tryFindCookieHeader (headers : HeaderDictionary) =
             if headers.ContainsKey("Cookie") then
                 headers.["Cookie"]
-                |> Array.map Arachne.Http.State.Cookie.Parse
+                |> Array.map Cookie.Parse
                 |> Some
             else None
 
@@ -213,7 +213,7 @@ module private Internal =
                 Uri = uri
                 Headers = Headers headers
                 Post = formData.Fields
-                Get = Query (Arachne.Uri.Query.Parse uri.Query)
+                Get = QueryParams (Query.Parse uri.Query)
                 Cookies = Cookies (tryFindCookieHeader headers)
                 ServerVariables = Http.ParameterCollection([])
                 Body = unbox req.["owin.RequestBody"]

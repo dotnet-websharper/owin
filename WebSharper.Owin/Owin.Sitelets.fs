@@ -133,7 +133,7 @@ module private Internal =
                         yield Http.Header.Custom k v
             }
 
-        let inline QueryParams (uri: Uri) : Http.ParameterCollection =
+        let QueryParams (uri: Uri) : Http.ParameterCollection =
             let query = Query.Parse uri.Query
             match fst Query.Pairs_ query with
             | Some qs ->
@@ -214,10 +214,8 @@ module private Internal =
                 Uri = uri
                 Headers = Headers headers
                 Post = formData.Fields
-                //Get = QueryParams uri
-                Get = Http.ParameterCollection([])
-                //Cookies = Cookies (tryFindCookieHeader headers)
-                Cookies = HttpCookieCollection()
+                Get = QueryParams uri
+                Cookies = Cookies (tryFindCookieHeader headers)
                 ServerVariables = Http.ParameterCollection([])
                 Body = unbox req.["owin.RequestBody"]
                 Files = formData.Files

@@ -357,7 +357,7 @@ module private Internal =
         static member LoadFromBinDirectory(binDirectory: string) =
             let d = DirectoryInfo(binDirectory)
             d.DiscoverAssemblies()
-            |> Seq.choose (fun f -> M.AssemblyInfo.Load(f.FullName))
+            |> Seq.choose (fun f -> try M.AssemblyInfo.Load(f.FullName) with _ -> None)
             |> M.Info.Create
 
         static member LoadFromWebRoot(webRoot: string) =

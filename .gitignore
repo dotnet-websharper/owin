@@ -6,3 +6,5 @@ obj/
 *.suo
 */Scripts/WebSharper/
 */Content/WebSharper/
+*.userprefs
+npm-debug.log

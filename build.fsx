@@ -4,7 +4,7 @@ open IntelliFactory.Build
 let bt =
     BuildTool().PackageId("WebSharper.Owin")
         .VersionFrom("WebSharper")
-        .WithFSharpVersion(FSharpVersion.FSharp30)
+        .WithFSharpVersion(FSharpVersion.FSharp31)
         .WithFramework(fun fw -> fw.Net45)
 
 let multipartParser =
@@ -23,7 +23,9 @@ let main =
             [
                 r.Project(multipartParser)
                 r.NuGet("Owin").ForceFoundVersion().Reference()
-                r.NuGet("Microsoft.Owin").ForceFoundVersion().Reference()
+                r.NuGet("Arachne.Http").ForceFoundVersion().Reference()
+                r.NuGet("Arachne.Http.State").ForceFoundVersion().Reference()
+                r.NuGet("Arachne.Uri").ForceFoundVersion().Reference()
                 r.Assembly("System.Configuration")
                 r.Assembly "System.Web"
             ])
@@ -47,6 +49,7 @@ let testHost =
                 r.Project(main)
                 r.Project(testSitelet)
                 r.NuGet("WebSharper").Reference()
+                r.NuGet("Arachne").ForceFoundVersion().Reference()
                 r.NuGet("Microsoft.Owin").Reference()
                 r.NuGet("Microsoft.Owin.Diagnostics").Reference()
                 r.NuGet("Microsoft.Owin.FileSystems").Reference()

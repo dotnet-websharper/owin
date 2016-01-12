@@ -93,6 +93,7 @@ module Server =
         | Index
         | Article of articleId: int
         | Upload
+        | [<Method "POST"; FormData("x", "y")>] Post of x: int * y: string
 
     let Header (ctx: Context<_>) =
         async {
@@ -127,6 +128,16 @@ module Server =
                                 Input [Type "text"; Name "name"]
                             ]
                             Div [Input [Type "file"; Name "thefile"]]
+                            Div [Input [Type "submit"]]
+                        ]
+                        H2 [Text "Form to test application/x-www-urlencoded management"]
+                        Form [
+                            Attr.Action (ctx.Link (Post (0, "")))
+                            Method "post"
+                            EncType "application/x-www-urlencoded"
+                        ] -< [
+                            Div [Label [Text "X: "; Input [Name "x"; Type "number"]]]
+                            Div [Label [Text "Y: "; Input [Name "y"]]]
                             Div [Input [Type "submit"]]
                         ]
                     ]
@@ -176,4 +187,5 @@ module Server =
                 | Index -> IndexPage ctx
                 | Article n -> ArticlePage n ctx
                 | Upload -> UploadPage ctx
+                | Post (x, y) -> ArticlePage x ctx
         ]

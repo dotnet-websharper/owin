@@ -107,9 +107,21 @@ module private Internal =
             req.ContentType <> null &&
             req.ContentType.ToLower().StartsWith "multipart/form-data"
 
-        let ParseMultiPartFormData (req: IOwinRequest) =
+        let DefaultCharset = System.Text.Encoding.GetEncoding("ISO-8859-1")
+        let re = System.Text.RegularExpressions.Regex("; *charset *= *([^;]+)")
+        let GetCharset (req: IOwinRequest) =
+            match req.ContentType with
+            | null -> DefaultCharset
+            | s ->
+                let m = re.Match(s.Trim())
+                if m.Success then
+                    System.Text.Encoding.GetEncoding m.Groups.[1].Value
+                else DefaultCharset
+
+        let ParseFormData (req: IOwinRequest) =
+            let enc = GetCharset req
             if IsMultipart req then
-                let parser = new MultipartFormDataParser(req.Body)
+                let parser = new MultipartFormDataParser(req.Body, enc)
                 let fields = [| for KeyValue(k, v) in parser.Parameters -> k, v.Data |]
                 let files =
                     [|
@@ -131,10 +143,12 @@ module private Internal =
                     |]
                 { Files = files; Fields = Http.ParameterCollection(fields) }
             else
-                { Files = []; Fields = Http.ParameterCollection([]) }
+                use s = new StreamReader(req.Body, enc)
+                let q = System.Web.HttpUtility.ParseQueryString(s.ReadToEnd())
+                { Files = []; Fields = Http.ParameterCollection(q) }
 
         let Request (req: IOwinRequest) : Http.Request =
-            let formData = ParseMultiPartFormData req
+            let formData = ParseFormData req
             let uri =
                 match req.PathBase.Value with
                 | "" | "/" -> req.Uri

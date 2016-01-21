@@ -1,4 +1,4 @@
-﻿namespace WebSharper.Owin
+namespace WebSharper.Owin
 
 open System
 open System.Collections.Generic
@@ -55,6 +55,7 @@ module private Internal =
     open HttpMultipartParser
 
     let [<Literal>] OwinContextKey = "OwinContext"
+    let [<Literal>] HttpContextKey = "HttpContext"
 
     type FormData =
         {
@@ -279,6 +280,12 @@ module private Internal =
                     return refresh null
                 }
 
+    let mkEnv (owinContext: IOwinContext) (httpContext: HttpContext) =
+        let m = Map.add OwinContextKey (box owinContext) Map.empty
+        match httpContext with
+        | null -> m
+        | x -> Map.add HttpContextKey (box (HttpContextWrapper(x))) m
+
     [<Sealed>]
     type ContextBuilder(cfg) =
         let info = cfg.Metadata
@@ -302,7 +309,7 @@ module private Internal =
             else
                 u
 
-        member b.GetContext<'T when 'T : equality>(site: Sitelet<'T>, req: Http.Request, context: IOwinContext) : Context<'T> =
+        member b.GetContext<'T when 'T : equality>(site: Sitelet<'T>, req: Http.Request, context: IOwinContext, httpContext: HttpContext) : Context<'T> =
             let appPath = context.Request.PathBase.Value
             let link = site.Router.Link
             let prefix = cfg.UrlPrefix
@@ -320,7 +327,7 @@ module private Internal =
                         p ++ loc
             {
                 ApplicationPath = appPath
-                Environment = Map.ofList [(OwinContextKey, context :> obj)]
+                Environment = mkEnv context httpContext
                 Link = link
                 Json = json
                 Metadata = info
@@ -331,10 +338,10 @@ module private Internal =
                 UserSession = OwinCookieUserSession(context)
             }
 
-    let dispatch (cb: ContextBuilder) (s: Sitelet<'T>) (context: IOwinContext) : option<Task> =
+    let dispatch (cb: ContextBuilder) (s: Sitelet<'T>) (context: IOwinContext) (httpContext: HttpContext) : option<Task> =
         try
             let request = O2W.Request context.Request
-            let ctx = cb.GetContext(s, request, context)
+            let ctx = cb.GetContext(s, request, context, httpContext)
             s.Router.Route(request)
             |> Option.map (fun action ->
                 let content = s.Controller.Handle(action)
@@ -410,6 +417,7 @@ type RemotingMiddleware(next: AppFunc, webRoot: string, server: Rem.Server) =
 
     member this.Invoke(env: Env) =
         let context = OwinContext(env) :> IOwinContext
+        let httpContext = HttpContext.Current
         let headers =
             O2W.Headers context.Request.Headers
             |> Seq.map (fun h -> (h.Name, h.Value))
@@ -427,7 +435,7 @@ type RemotingMiddleware(next: AppFunc, webRoot: string, server: Rem.Server) =
                             member this.UserSession = session :> _
                             member this.RequestUri = uri
                             member this.RootFolder = webRoot
-                            member this.Environment = upcast Map.ofList [(OwinContextKey, context :> obj)]}
+                            member this.Environment = upcast mkEnv context httpContext}
                     let! body = reader.ReadToEndAsync() |> Async.AwaitTask
                     let! resp =
                         server.HandleRequest(
@@ -476,7 +484,8 @@ type SiteletMiddleware<'T when 'T : equality>(next: AppFunc, config: Options, si
     let appFunc =
         let siteletAppFunc = AppFunc(fun env ->
             let context = OwinContext(env) :> IOwinContext
-            match dispatch cb sitelet context with
+            let httpContext = HttpContext.Current // non-null if running on top of asp.net
+            match dispatch cb sitelet context httpContext with
             | Some t -> t
             | None -> next.Invoke(env))
         if config.RemotingServer.IsSome then
@@ -598,10 +607,9 @@ type WebSharperOptions<'T when 'T : equality>() =
 
         if not (List.isEmpty this.InitActions) then
             let mkCtx (context: IOwinContext) =
-                let env = Map.ofList [(OwinContextKey, context :> obj)]
                 let session = new OwinCookieUserSession(context)
                 { new IContext with
-                    member ctx.Environment = env :> _
+                    member ctx.Environment = upcast mkEnv context HttpContext.Current
                     member ctx.RequestUri = context.Request.Uri
                     member ctx.RootFolder = this.ServerRootDirectory
                     member ctx.UserSession = session :> _

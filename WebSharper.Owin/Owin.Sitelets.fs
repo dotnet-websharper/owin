@@ -61,6 +61,7 @@ module private Internal =
         {
             Files : seq<HttpPostedFileBase>
             Fields : Http.ParameterCollection
+            Body : Stream
         }
 
     module Seq =
@@ -106,7 +107,7 @@ module private Internal =
 
         let IsMultipart (req: IOwinRequest) =
             req.ContentType <> null &&
-            req.ContentType.ToLower().StartsWith "multipart/form-data"
+            req.ContentType.ToLowerInvariant().StartsWith "multipart/form-data"
 
         let DefaultCharset = System.Text.Encoding.GetEncoding("ISO-8859-1")
         let re = System.Text.RegularExpressions.Regex("; *charset *= *([^;]+)")
@@ -121,8 +122,11 @@ module private Internal =
 
         let ParseFormData (req: IOwinRequest) =
             let enc = GetCharset req
+            let body = new MemoryStream()
+            req.Body.CopyTo body
+            body.Seek(0L, SeekOrigin.Begin) |> ignore
             if IsMultipart req then
-                let parser = new MultipartFormDataParser(req.Body, enc)
+                let parser = new MultipartFormDataParser(body, enc, leaveOpen = true)
                 let fields = [| for KeyValue(k, v) in parser.Parameters -> k, v.Data |]
                 let files =
                     [|
@@ -134,22 +138,20 @@ module private Internal =
                                 member this.FileName = f.FileName
                                 member this.InputStream = f.Data
                                 member this.SaveAs(filename) =
-                                    use ms = new MemoryStream()
-                                    let buffer = Array.zeroCreate (16 * 1024)
-                                    let rec loop () =
-                                        let read = f.Data.Read(buffer, 0, buffer.Length)
-                                        if read > 0 then ms.Write(buffer, 0, read); loop ()
-                                    loop ()
-                                    File.WriteAllBytes(filename, ms.ToArray()) }
+                                    if f.Data.CanSeek then
+                                        f.Data.Seek(0L, SeekOrigin.Begin) |> ignore
+                                    use w = File.OpenWrite(filename)
+                                    f.Data.CopyTo w }
                     |]
-                { Files = files; Fields = Http.ParameterCollection(fields) }
+                { Files = files; Fields = Http.ParameterCollection(fields); Body = body }
             else
-                use s = new StreamReader(req.Body, enc)
+                use s = new StreamReader(body, enc, false, 1024, true)
                 let q = System.Web.HttpUtility.ParseQueryString(s.ReadToEnd())
-                { Files = []; Fields = Http.ParameterCollection(q) }
+                { Files = []; Fields = Http.ParameterCollection(q); Body = body }
 
         let Request (req: IOwinRequest) : Http.Request =
             let formData = ParseFormData req
+            formData.Body.Seek(0L, SeekOrigin.Begin) |> ignore
             let uri =
                 match req.PathBase.Value with
                 | "" | "/" -> req.Uri
@@ -169,7 +171,7 @@ module private Internal =
                 Get = Query req.Query
                 Cookies = Cookies req.Cookies
                 ServerVariables = Http.ParameterCollection([])
-                Body = req.Body
+                Body = formData.Body
                 Files = formData.Files
             }
 

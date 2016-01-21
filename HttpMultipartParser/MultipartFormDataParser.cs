@@ -135,8 +135,11 @@ namespace HttpMultipartParser
         /// <param name="stream">
         /// The stream containing the multipart data
         /// </param>
-        public MultipartFormDataParser(Stream stream)
-            : this(stream, null, Encoding.UTF8, DefaultBufferSize)
+        /// <param name="leaveOpen">
+        /// If true, leave the underlying stream open on Dispose.
+        /// </param>
+        public MultipartFormDataParser(Stream stream, bool leaveOpen = false)
+            : this(stream, null, Encoding.UTF8, DefaultBufferSize, leaveOpen)
         {
         }
 
@@ -151,8 +154,11 @@ namespace HttpMultipartParser
         /// The multipart/form-data boundary. This should be the value
         ///     returned by the request header.
         /// </param>
-        public MultipartFormDataParser(Stream stream, string boundary)
-            : this(stream, boundary, Encoding.UTF8, DefaultBufferSize)
+        /// <param name="leaveOpen">
+        /// If true, leave the underlying stream open on Dispose.
+        /// </param>
+        public MultipartFormDataParser(Stream stream, string boundary, bool leaveOpen = false)
+            : this(stream, boundary, Encoding.UTF8, DefaultBufferSize, leaveOpen)
         {
         }
 
@@ -167,8 +173,11 @@ namespace HttpMultipartParser
         /// <param name="encoding">
         /// The encoding of the multipart data
         /// </param>
-        public MultipartFormDataParser(Stream stream, Encoding encoding) 
-            : this(stream, null, encoding, DefaultBufferSize)
+        /// <param name="leaveOpen">
+        /// If true, leave the underlying stream open on Dispose.
+        /// </param>
+        public MultipartFormDataParser(Stream stream, Encoding encoding, bool leaveOpen = false) 
+            : this(stream, null, encoding, DefaultBufferSize, leaveOpen)
         {
         }
 
@@ -186,8 +195,11 @@ namespace HttpMultipartParser
         /// <param name="encoding">
         /// The encoding of the multipart data
         /// </param>
-        public MultipartFormDataParser(Stream stream, string boundary, Encoding encoding)
-            : this(stream, boundary, encoding, DefaultBufferSize)
+        /// <param name="leaveOpen">
+        /// If true, leave the underlying stream open on Dispose.
+        /// </param>
+        public MultipartFormDataParser(Stream stream, string boundary, Encoding encoding, bool leaveOpen = false)
+            : this(stream, boundary, encoding, DefaultBufferSize, leaveOpen)
         {
             // 4096 is the optimal buffer size as it matches the internal buffer of a StreamReader
             // See: http://stackoverflow.com/a/129318/203133
@@ -209,8 +221,11 @@ namespace HttpMultipartParser
         /// The size of the buffer to use for parsing the multipart form data. This must be larger
         ///     then (size of boundary + 4 + # bytes in newline).
         /// </param>
-        public MultipartFormDataParser(Stream stream, Encoding encoding, int binaryBufferSize)
-            : this(stream, null, encoding, binaryBufferSize)
+        /// <param name="leaveOpen">
+        /// If true, leave the underlying stream open on Dispose.
+        /// </param>
+        public MultipartFormDataParser(Stream stream, Encoding encoding, int binaryBufferSize, bool leaveOpen = false)
+            : this(stream, null, encoding, binaryBufferSize, leaveOpen)
         {
         }
 
@@ -232,7 +247,10 @@ namespace HttpMultipartParser
         /// The size of the buffer to use for parsing the multipart form data. This must be larger
         ///     then (size of boundary + 4 + # bytes in newline).
         /// </param>
-        public MultipartFormDataParser(Stream stream, string boundary, Encoding encoding, int binaryBufferSize)
+        /// <param name="leaveOpen">
+        /// If true, leave the underlying stream open on Dispose.
+        /// </param>
+        public MultipartFormDataParser(Stream stream, string boundary, Encoding encoding, int binaryBufferSize, bool leaveOpen = false)
         {
             this.Parameters = new Dictionary<string, ParameterPart>();
             this.Files = new List<FilePart>();
@@ -240,7 +258,7 @@ namespace HttpMultipartParser
             this.BinaryBufferSize = binaryBufferSize;
             this.readEndBoundary = false;
 
-            using (var reader = new RebufferableBinaryReader(stream, this.Encoding, this.BinaryBufferSize))
+            using (var reader = new RebufferableBinaryReader(stream, this.Encoding, this.BinaryBufferSize, leaveOpen))
             {
                 // If we don't know the boundary now is the time to calculate it.
                 if (boundary == null)

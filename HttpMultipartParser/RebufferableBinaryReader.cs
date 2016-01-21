@@ -51,6 +51,11 @@ namespace HttpMultipartParser
         private readonly Encoding encoding;
 
         /// <summary>
+        ///     If true, leave the underlying stream open on Dispose.
+        /// </summary>
+        private bool leaveOpen;
+
+        /// <summary>
         ///     The stream to read raw data from.
         /// </summary>
         private readonly Stream stream;
@@ -102,12 +107,16 @@ namespace HttpMultipartParser
         /// <param name="bufferSize">
         /// The buffer size to use for new buffers.
         /// </param>
-        public RebufferableBinaryReader(Stream input, Encoding encoding, int bufferSize)
+        /// <param name="leaveOpen">
+        /// If true, leave the underlying stream open on Dispose.
+        /// </param>
+        public RebufferableBinaryReader(Stream input, Encoding encoding, int bufferSize, bool leaveOpen = false)
         {
             this.stream = input;
             this.streamStack = new BinaryStreamStack(encoding);
             this.encoding = encoding;
             this.bufferSize = bufferSize;
+            this.leaveOpen = leaveOpen;
         }
 
         #endregion
@@ -143,7 +152,10 @@ namespace HttpMultipartParser
         /// </summary>
         public void Dispose()
         {
-            this.stream.Close();
+            if (!this.leaveOpen)
+            {
+                this.stream.Close();
+            }
         }
 
         /// <summary>

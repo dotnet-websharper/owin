@@ -42,7 +42,11 @@ type Options =
         {
             Debug = false
             JsonProvider = Core.Json.Provider.Create()
+#if ZAFIR
+            Metadata = M.empty
+#else
             Metadata = M.Info.Create([])
+#endif
             ServerRootDirectory = dir
             UrlPrefix = ""
             RemotingServer = None
@@ -206,7 +210,11 @@ module private Internal =
                 | null -> None
                 | x -> Some x
             GetAssemblyRendering = fun name ->
+#if ZAFIR
+                let aid = P.AssemblyId.Create(name)
+#else
                 let aid = P.AssemblyId.Create(name.FullName)
+#endif
                 let url = if isDebug then pu.JavaScriptPath(aid) else pu.MinifiedJavaScriptPath(aid)
                 Res.RenderLink url
             GetWebResourceRendering = fun ty resource ->
@@ -380,8 +388,13 @@ module private Internal =
         static member LoadFromBinDirectory(binDirectory: string) =
             let d = DirectoryInfo(binDirectory)
             d.DiscoverAssemblies()
+#if ZAFIR
+            |> Seq.choose (fun f -> try M.IO.LoadReflected(Assembly.LoadFileInfo f) with _ -> None)
+            |> M.union
+#else
             |> Seq.choose (fun f -> try M.AssemblyInfo.Load(f.FullName) with _ -> None)
             |> M.Info.Create
+#endif
 
         static member LoadFromWebRoot(webRoot: string) =
             M.Info.LoadFromBinDirectory(Path.Combine(webRoot, "bin"))
@@ -581,7 +594,11 @@ type WebSharperOptions<'T when 'T : equality>() =
                 if this.UseRemoting || Option.isSome this.Sitelet || this.DiscoverSitelet then
                     M.Info.LoadFromBinDirectory(this.BinDirectory)
                 else
+#if ZAFIR
+                    M.empty
+#else
                     M.Info.Create([])
+#endif
              
         let remotingServer, jsonProvider =
             if this.UseRemoting then

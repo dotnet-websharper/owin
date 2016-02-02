@@ -35,7 +35,7 @@ let testSitelet =
             [
                 r.Project(multipartParser)
                 r.Project(main)
-                r.NuGet("Zafir.Html").Reference()
+                r.NuGet("Zafir.Html").Latest(true).ForceFoundVersion().Reference()
             ])
 
 let testHost =
@@ -46,7 +46,7 @@ let testHost =
                 r.Project(multipartParser)
                 r.Project(main)
                 r.Project(testSitelet)
-                r.NuGet("Zafir").Reference()
+                r.NuGet("Zafir").Latest(true).Reference()
                 r.NuGet("Microsoft.Owin").Reference()
                 r.NuGet("Microsoft.Owin.Diagnostics").Reference()
                 r.NuGet("Microsoft.Owin.FileSystems").Reference()

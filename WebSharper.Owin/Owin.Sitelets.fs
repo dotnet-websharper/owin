@@ -17,6 +17,9 @@ module Rem = WebSharper.Core.Remoting
 module Res = WebSharper.Core.Resources
 module P = WebSharper.PathConventions
 module M = WebSharper.Core.Metadata
+#if ZAFIR
+type DepG = WebSharper.Core.DependencyGraph.Graph
+#endif
 
 type Env = IDictionary<string, obj>
 type AppFunc = Func<Env, Task>
@@ -43,7 +46,7 @@ type Options =
             Debug = false
             JsonProvider = Core.Json.Provider.Create()
 #if ZAFIR
-            Metadata = M.empty
+            Metadata = M.Info.Empty
 #else
             Metadata = M.Info.Create([])
 #endif
@@ -130,7 +133,7 @@ module private Internal =
             req.Body.CopyTo body
             body.Seek(0L, SeekOrigin.Begin) |> ignore
             if IsMultipart req then
-                let parser = new MultipartFormDataParser(body, enc, leaveOpen = true)
+                let parser = new MultipartFormDataParser(body, enc)
                 let fields = [| for KeyValue(k, v) in parser.Parameters -> k, v.Data |]
                 let files =
                     [|
@@ -390,7 +393,7 @@ module private Internal =
             d.DiscoverAssemblies()
 #if ZAFIR
             |> Seq.choose (fun f -> try M.IO.LoadReflected(Assembly.LoadFileInfo f) with _ -> None)
-            |> M.union
+            |> DepG.UnionOfMetadata
 #else
             |> Seq.choose (fun f -> try M.AssemblyInfo.Load(f.FullName) with _ -> None)
             |> M.Info.Create
@@ -403,7 +406,11 @@ type Options with
 
     static member Create(meta) =
         let dir = System.IO.Directory.GetCurrentDirectory()
+#if ZAFIR
+        let remotingServer = Rem.Server.Create meta
+#else
         let remotingServer = Rem.Server.Create None meta
+#endif
         {
             Debug = false
             JsonProvider = remotingServer.JsonProvider
@@ -415,7 +422,11 @@ type Options with
 
     member o.WithRunRemoting(b) =
         let server =
+#if ZAFIR
+            if b then Some (Rem.Server.Create o.Metadata) else None
+#else
             if b then Some (Rem.Server.Create None o.Metadata) else None
+#endif
         { o with RemotingServer = server }
 
     static member Create(webRoot, ?binDirectory) =
@@ -595,14 +606,18 @@ type WebSharperOptions<'T when 'T : equality>() =
                     M.Info.LoadFromBinDirectory(this.BinDirectory)
                 else
 #if ZAFIR
-                    M.empty
+                    M.Info.Empty
 #else
                     M.Info.Create([])
 #endif
              
         let remotingServer, jsonProvider =
             if this.UseRemoting then
+#if ZAFIR
+                let rem = Rem.Server.Create meta
+#else
                 let rem = Rem.Server.Create None meta
+#endif
                 Some rem, rem.JsonProvider
             else None, Core.Json.Provider.Create()
 

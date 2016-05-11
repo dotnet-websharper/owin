@@ -2,5 +2,6 @@
   <info organisation="IntelliFactory" module="websharper.owin" revision="3.0" />
   <dependencies>
     <dependency name="websharper" rev="latest.integration"  />
+    <dependency name="websharper.html" rev="latest.integration"  />
   </dependencies>
 </ivy-module>

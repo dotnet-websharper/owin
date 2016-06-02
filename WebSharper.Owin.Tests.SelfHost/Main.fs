@@ -23,7 +23,16 @@ module SelfHostedServer =
                     appB.UseStaticFiles(
                             StaticFileOptions(
                                 FileSystem = PhysicalFileSystem(workingDirectory)))
-                        .UseDiscoveredSitelet(workingDirectory)
+//                        .UseDiscoveredSitelet(workingDirectory)
+                        .UseWebSharper(
+                            WebSharperOptions(
+                                ServerRootDirectory = workingDirectory,
+                                DiscoverSitelet = true,
+                                OnException = (fun debug resp exn ->
+                                    resp.WriteAsync("[UNCAUGHT EXCEPTION]\r\n" + string exn)
+                                )
+                            )
+                        )
                     |> ignore)
                 stdout.WriteLine("Serving {0}", url)
                 stdin.ReadLine() |> ignore

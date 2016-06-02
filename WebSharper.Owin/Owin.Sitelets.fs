@@ -33,12 +33,21 @@ type Options =
         ServerRootDirectory : string
         UrlPrefix : string
         RemotingServer : option<Rem.Server>
+        OnException : bool -> IOwinResponse -> exn -> Task
     }
 
     member o.WithDebug() = o.WithDebug(true)
     member o.WithDebug(d) = { o with Debug = d }
     member o.WithServerRootDirectory(d) = { o with ServerRootDirectory = d }
     member o.WithUrlPrefix(t) = { o with UrlPrefix = t }
+    member o.WithOnException(f) = { o with OnException = f }
+
+    static member DefaultOnException (debug: bool) (resp: IOwinResponse) (e: exn) =
+        resp.StatusCode <- 500
+        if debug then
+            resp.WriteAsync (e.ToString())
+        else
+            resp.WriteAsync "Internal Server Error"
 
     static member Create() =
         let dir = System.IO.Directory.GetCurrentDirectory()
@@ -53,6 +62,7 @@ type Options =
             ServerRootDirectory = dir
             UrlPrefix = ""
             RemotingServer = None
+            OnException = Options.DefaultOnException
         }
 
 [<AutoOpen>]
@@ -184,7 +194,7 @@ module private Internal =
 
     module W2O =
 
-        let WriteResponse (resp: Task<Http.Response>) (out: IOwinResponse) =
+        let WriteResponse (resp: Task<Http.Response>) (out: IOwinResponse) (onException: IOwinResponse -> exn -> Task) =
             resp.ContinueWith(fun (t: Task<Http.Response>) ->
                 try
                     match t.Exception with
@@ -197,9 +207,9 @@ module private Internal =
                         resp.WriteBody(str :> _)
                         out.Write(str.ToArray())
                     | e ->
-                        out.Write(sprintf "%A" e)
+                        (onException out e).Wait()
                 with e ->
-                    out.Write(sprintf "%A" e)
+                    (onException out e).Wait()
             )
 
     let buildResourceContext cfg (context: IOwinContext) : Res.Context =
@@ -351,7 +361,7 @@ module private Internal =
                 UserSession = OwinCookieUserSession(context)
             }
 
-    let dispatch (cb: ContextBuilder) (s: Sitelet<'T>) (context: IOwinContext) (httpContext: HttpContext) : option<Task> =
+    let dispatch (cb: ContextBuilder) (s: Sitelet<'T>) (context: IOwinContext) (httpContext: HttpContext) onException : option<Task> =
         try
             let request = O2W.Request context.Request
             let ctx = cb.GetContext(s, request, context, httpContext)
@@ -359,10 +369,9 @@ module private Internal =
             |> Option.map (fun action ->
                 let content = s.Controller.Handle(action)
                 let response = Content.ToResponse content ctx |> Async.StartAsTask
-                W2O.WriteResponse response context.Response)
+                W2O.WriteResponse response context.Response onException)
         with e ->
-            context.Response.StatusCode <- 500
-            Some (context.Response.WriteAsync(sprintf "%A" e))
+            Some (onException context.Response e)
 
     type Assembly =
 
@@ -418,6 +427,7 @@ type Options with
             ServerRootDirectory = dir
             UrlPrefix = ""
             RemotingServer = Some remotingServer
+            OnException = Options.DefaultOnException
         }
 
     member o.WithRunRemoting(b) =
@@ -439,7 +449,7 @@ type Options with
         let meta = M.Info.LoadFromBinDirectory dir
         { o with Metadata = meta }
 
-type RemotingMiddleware(next: AppFunc, webRoot: string, server: Rem.Server) =
+type RemotingMiddleware(next: AppFunc, webRoot: string, server: Rem.Server, onException: IOwinResponse -> exn -> Task) =
 
     member this.Invoke(env: Env) =
         let context = OwinContext(env) :> IOwinContext
@@ -472,10 +482,9 @@ type RemotingMiddleware(next: AppFunc, webRoot: string, server: Rem.Server) =
                     context.Response.StatusCode <- 200
                     context.Response.ContentType <- resp.ContentType
                     context.Response.Write(resp.Content)
+                    return ()
                 with e ->
-                    context.Response.StatusCode <- 500
-                    context.Response.Write(sprintf "%A" e)
-                return ()
+                    return! onException context.Response e |> Async.AwaitIAsyncResult |> Async.Ignore
             }
             |> Async.StartAsTask
             :> Task
@@ -484,7 +493,8 @@ type RemotingMiddleware(next: AppFunc, webRoot: string, server: Rem.Server) =
     // (options)
 
     new (next, options: Options) =
-        new RemotingMiddleware(next, options.ServerRootDirectory, options.RemotingServer.Value)
+        new RemotingMiddleware(next, options.ServerRootDirectory, options.RemotingServer.Value,
+            options.OnException options.Debug)
 
     static member AsMidFunc(options: Options) =
         MidFunc(fun next ->
@@ -511,7 +521,7 @@ type SiteletMiddleware<'T when 'T : equality>(next: AppFunc, config: Options, si
         let siteletAppFunc = AppFunc(fun env ->
             let context = OwinContext(env) :> IOwinContext
             let httpContext = HttpContext.Current // non-null if running on top of asp.net
-            match dispatch cb sitelet context httpContext with
+            match dispatch cb sitelet context httpContext (config.OnException config.Debug) with
             | Some t -> t
             | None -> next.Invoke(env))
         if config.RemotingServer.IsSome then
@@ -586,6 +596,10 @@ type WebSharperOptions<'T when 'T : equality>() =
     member val Sitelet = None with get, set
     member val DiscoverSitelet = false with get, set
     member val Metadata = None with get, set
+    member val OnException = Options.DefaultOnException with get, set
+
+    static member DefaultOnException debug response exn =
+        Options.DefaultOnException debug response exn
     
     member internal this.InitActions = initActions
 
@@ -628,6 +642,7 @@ type WebSharperOptions<'T when 'T : equality>() =
             ServerRootDirectory = this.ServerRootDirectory
             UrlPrefix = this.UrlPrefix
             RemotingServer = remotingServer
+            OnException = this.OnException
         }
 
         match this.Sitelet with

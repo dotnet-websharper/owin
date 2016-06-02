@@ -41,6 +41,15 @@ type Options =
     /// Sets whether the WebSharper Remoting service should be run.
     member WithRunRemoting : bool -> Options
 
+    /// Sets what to do when the WebSharper sitelet or remote function throws an exception.
+    /// The first parameter is equal to this.Debug.
+    member WithOnException : (bool -> IOwinResponse -> exn -> Task) -> Options
+
+    /// The default action taken when an exception is uncaught from a sitelet or remote function:
+    /// set StatusCode to 500 and write the stack trace if Debug is true,
+    /// or "Internal Server Error" otherwise.
+    static member DefaultOnException : bool -> IOwinResponse -> exn -> Task
+
 type Env = IDictionary<string, obj>
 type AppFunc = Func<Env, Task>
 type MidFunc = Func<AppFunc, AppFunc>
@@ -125,6 +134,17 @@ type WebSharperOptions<'T when 'T: equality> =
     /// Whether to search assemblies for a sitelet to serve if Sitelet is set to None.
     /// Default: false.
     member DiscoverSitelet : bool with get, set
+
+    /// What to do when the WebSharper sitelet or remote function throws an exception.
+    /// The first parameter is equal to this.Debug.
+    /// Default: set StatusCode to 500 and write the stack trace if Debug is true,
+    /// or "Internal Server Error" otherwise.
+    member OnException : (bool -> IOwinResponse -> exn -> Task) with get, set
+
+    /// The default action taken when an exception is uncaught from a sitelet or remote function:
+    /// set StatusCode to 500 and write the stack trace if Debug is true,
+    /// or "Internal Server Error" otherwise.
+    static member DefaultOnException : bool -> IOwinResponse -> exn -> Task
 
     /// Set the sitelet to serve.
     member WithSitelet : Sitelet<'T> -> WebSharperOptions<'T>

@@ -463,26 +463,37 @@ type RemotingMiddleware(next: AppFunc, webRoot: string, server: Rem.Server, onEx
         if Rem.IsRemotingRequest getHeader then
             async {
                 try
-                    use reader = new StreamReader(context.Request.Body)
-                    let session = new OwinCookieUserSession(context)
-                    let uri = context.Request.Uri
-                    let ctx =
-                        { new Web.IContext with
-                            member this.UserSession = session :> _
-                            member this.RequestUri = uri
-                            member this.RootFolder = webRoot
-                            member this.Environment = upcast mkEnv context httpContext}
-                    let! body = reader.ReadToEndAsync() |> Async.AwaitTask
-                    let! resp =
-                        server.HandleRequest(
-                            {
-                                Body = body
-                                Headers = getHeader
-                            }, ctx)
-                    context.Response.StatusCode <- 200
-                    context.Response.ContentType <- resp.ContentType
-                    context.Response.Write(resp.Content)
-                    return ()
+                    match WebSharper.Web.RpcHandler.CorsAndCsrfCheck context.Request.Method
+                            (fun k -> match context.Request.Cookies.[k] with null -> None | x -> Some x)
+                            getHeader
+                            (fun k v -> context.Response.Cookies.Append(k, v,
+                                            CookieOptions(Expires = Nullable(System.DateTime.UtcNow.AddYears(1000)))))
+                            context.Request.Uri with
+                    | WebSharper.Web.Error (code, _) ->
+                        context.Response.StatusCode <- code
+                    | WebSharper.Web.Preflight headers ->
+                        headers |> List.iter (fun (k, v) -> context.Response.Headers.Add(k, [|v|]))
+                    | WebSharper.Web.Ok headers ->
+                        headers |> List.iter (fun (k, v) -> context.Response.Headers.Add(k, [|v|]))
+                        use reader = new StreamReader(context.Request.Body)
+                        let session = new OwinCookieUserSession(context)
+                        let uri = context.Request.Uri
+                        let ctx =
+                            { new Web.IContext with
+                                member this.UserSession = session :> _
+                                member this.RequestUri = uri
+                                member this.RootFolder = webRoot
+                                member this.Environment = upcast mkEnv context httpContext}
+                        let! body = reader.ReadToEndAsync() |> Async.AwaitTask
+                        let! resp =
+                            server.HandleRequest(
+                                {
+                                    Body = body
+                                    Headers = getHeader
+                                }, ctx)
+                        context.Response.StatusCode <- 200
+                        context.Response.ContentType <- resp.ContentType
+                        context.Response.Write(resp.Content)
                 with e ->
                     return! onException context.Response e |> Async.AwaitIAsyncResult |> Async.Ignore
             }

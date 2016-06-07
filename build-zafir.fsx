@@ -12,7 +12,7 @@ let multipartParser =
         .Configuration("Release")
         .GeneratedAssemblyFiles(
             [
-                "HttpMultipartParser/bin/Release/HttpMultipartParser.dll"
+                __SOURCE_DIRECTORY__ + "/HttpMultipartParser/bin/Release/HttpMultipartParser.dll"
             ]
         )
 

@@ -463,12 +463,12 @@ type RemotingMiddleware(next: AppFunc, webRoot: string, server: Rem.Server, onEx
         if Rem.IsRemotingRequest getHeader then
             async {
                 try
-                    match WebSharper.Web.RpcHandler.CorsAndCsrfCheck context.Request.Method
+                    match WebSharper.Web.RpcHandler.CorsAndCsrfCheck context.Request.Method context.Request.Uri
                             (fun k -> match context.Request.Cookies.[k] with null -> None | x -> Some x)
                             getHeader
                             (fun k v -> context.Response.Cookies.Append(k, v,
                                             CookieOptions(Expires = Nullable(System.DateTime.UtcNow.AddYears(1000)))))
-                            context.Request.Uri with
+                            with
                     | WebSharper.Web.Error (code, _) ->
                         context.Response.StatusCode <- code
                     | WebSharper.Web.Preflight headers ->

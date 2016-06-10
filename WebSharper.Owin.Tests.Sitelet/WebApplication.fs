@@ -144,7 +144,7 @@ module Server =
             )
         }
 
-    let ArticlePage articleId ctx =
+    let ArticlePage articleId (ctx: Context<Action>) =
         Content.Page(
             Body =
                 [
@@ -154,7 +154,7 @@ module Server =
                 ]
         )
 
-    let UploadPage ctx =
+    let UploadPage (ctx: Context<Action>) =
         Content.Page(
             Body =
                 match Array.ofSeq ctx.Request.Files with

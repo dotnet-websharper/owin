@@ -31,6 +31,7 @@ type Options =
         Debug : bool
         JsonProvider : Core.Json.Provider
         Metadata : M.Info
+        Dependencies : DepG
         ServerRootDirectory : string
         UrlPrefix : string
         RemotingServer : option<Rem.Server>
@@ -57,6 +58,7 @@ type Options =
             JsonProvider = Core.Json.Provider.Create()
 #if ZAFIR
             Metadata = M.Info.Empty
+            Dependencies = DepG.Empty
 #else
             Metadata = M.Info.Create([])
 #endif
@@ -314,6 +316,7 @@ module private Internal =
     [<Sealed>]
     type ContextBuilder(cfg) =
         let info = cfg.Metadata
+        let graph = cfg.Dependencies
         let json = cfg.JsonProvider
         let resContext = buildResourceContext cfg
 
@@ -356,6 +359,7 @@ module private Internal =
                 Link = link,
                 Json = json,
                 Metadata = info,
+                Dependencies = graph,
                 ResolveUrl = resolveUrl context appPath,
                 ResourceContext = resContext context,
                 Request = req,
@@ -401,31 +405,30 @@ module private Internal =
 
         static member LoadFromBinDirectory(binDirectory: string) =
             let d = DirectoryInfo(binDirectory)
-            d.DiscoverAssemblies()
-#if ZAFIR
-            |> Seq.choose (fun f -> try M.IO.LoadReflected(Assembly.LoadFileInfo f) with _ -> None)
-            |> DepG.UnionOfMetadata
-#else
-            |> Seq.choose (fun f -> try M.AssemblyInfo.Load(f.FullName) with _ -> None)
-            |> M.Info.Create
-#endif
+            let refs =
+                d.DiscoverAssemblies()
+                |> Seq.choose (fun f -> try M.IO.LoadReflected(Assembly.LoadFileInfo f) with _ -> None)
+                |> List.ofSeq
+            M.Info.UnionWithoutDependencies refs, DepG.FromData(refs |> Seq.map (fun m -> m.Dependencies))
 
         static member LoadFromWebRoot(webRoot: string) =
             M.Info.LoadFromBinDirectory(Path.Combine(webRoot, "bin"))
 
 type Options with
 
-    static member Create(meta) =
+    static member Create(meta, graph) =
         let dir = System.IO.Directory.GetCurrentDirectory()
 #if ZAFIR
-        let remotingServer = Rem.Server.Create meta
+        let json = Core.Json.Provider.CreateTyped meta
+        let remotingServer = Rem.Server.Create meta json
 #else
         let remotingServer = Rem.Server.Create None meta
 #endif
         {
             Debug = false
-            JsonProvider = remotingServer.JsonProvider
+            JsonProvider = json
             Metadata = meta
+            Dependencies = graph
             ServerRootDirectory = dir
             UrlPrefix = ""
             RemotingServer = Some remotingServer
@@ -435,7 +438,7 @@ type Options with
     member o.WithRunRemoting(b) =
         let server =
 #if ZAFIR
-            if b then Some (Rem.Server.Create o.Metadata) else None
+            if b then Some (Rem.Server.Create o.Metadata o.JsonProvider) else None
 #else
             if b then Some (Rem.Server.Create None o.Metadata) else None
 #endif
@@ -443,13 +446,13 @@ type Options with
 
     static member Create(webRoot, ?binDirectory) =
         let binDirectory = defaultArg binDirectory (Path.Combine(webRoot, "bin"))
-        let meta = M.Info.LoadFromBinDirectory(binDirectory)
-        Options.Create(meta)
+        let meta, graph = M.Info.LoadFromBinDirectory(binDirectory)
+        Options.Create(meta, graph)
             .WithServerRootDirectory(webRoot)
 
     member o.WithBinDirectory(dir) =
-        let meta = M.Info.LoadFromBinDirectory dir
-        { o with Metadata = meta }
+        let meta, graph = M.Info.LoadFromBinDirectory dir
+        { o with Metadata = meta; Dependencies = graph }
 
 type RemotingMiddleware(next: AppFunc, webRoot: string, server: Rem.Server, onException: IOwinResponse -> exn -> Task) =
 
@@ -516,11 +519,11 @@ type RemotingMiddleware(next: AppFunc, webRoot: string, server: Rem.Server, onEx
     // (webRoot, ?binDirectory)
 
     static member UseRemoting(webRoot: string, ?binDirectory: string) =
-        let meta =
+        let meta, graph =
             match binDirectory with
             | None -> M.Info.LoadFromWebRoot(webRoot)
             | Some binDirectory -> M.Info.LoadFromBinDirectory(binDirectory)
-        let o = Options.Create(meta).WithServerRootDirectory(webRoot)
+        let o = Options.Create(meta, graph).WithServerRootDirectory(webRoot)
         fun next -> new RemotingMiddleware(next, o)
 
     static member AsMidFunc(webRoot: string, ?binDirectory: string) =
@@ -608,7 +611,7 @@ type WebSharperOptions<'T when 'T : equality>() =
     member val Debug = false with get, set
     member val Sitelet = None with get, set
     member val DiscoverSitelet = false with get, set
-    member val Metadata = None with get, set
+    member val MetadataAndGraph = None with get, set
     member val OnException = Options.DefaultOnException with get, set
 
     static member DefaultOnException debug response exn =
@@ -625,15 +628,15 @@ type WebSharperOptions<'T when 'T : equality>() =
         this  
 
     member internal this.Run(builder: IAppBuilder) =
-        let meta = 
-            match this.Metadata with
+        let meta, graph = 
+            match this.MetadataAndGraph with
             | Some m -> m
             | None ->
                 if this.UseRemoting || Option.isSome this.Sitelet || this.DiscoverSitelet then
                     M.Info.LoadFromBinDirectory(this.BinDirectory)
                 else
 #if ZAFIR
-                    M.Info.Empty
+                    M.Info.Empty, DepG.Empty
 #else
                     M.Info.Create([])
 #endif
@@ -641,7 +644,8 @@ type WebSharperOptions<'T when 'T : equality>() =
         let remotingServer, jsonProvider =
             if this.UseRemoting then
 #if ZAFIR
-                let rem = Rem.Server.Create meta
+                let json = Core.Json.Provider.CreateTyped meta
+                let rem = Rem.Server.Create meta json
 #else
                 let rem = Rem.Server.Create None meta
 #endif
@@ -652,6 +656,7 @@ type WebSharperOptions<'T when 'T : equality>() =
             Debug = this.Debug
             JsonProvider = jsonProvider
             Metadata = meta
+            Dependencies = graph
             ServerRootDirectory = this.ServerRootDirectory
             UrlPrefix = this.UrlPrefix
             RemotingServer = remotingServer
@@ -684,10 +689,10 @@ module Extensions =
     type IAppBuilder with
 
         member this.UseWebSharperRemoting(webRoot: string, meta: M.Info) =
-            this.Use(RemotingMiddleware.AsMidFunc(Options.Create(meta).WithServerRootDirectory(webRoot)))
+            this.Use(RemotingMiddleware.AsMidFunc(Options.Create(meta, DepG.FromData([ meta.Dependencies ])).WithServerRootDirectory(webRoot)))
 
         member this.UseWebSharperRemoting(meta: M.Info) =
-            this.Use(RemotingMiddleware.AsMidFunc(Options.Create(meta)))
+            this.Use(RemotingMiddleware.AsMidFunc(Options.Create(meta, DepG.FromData([ meta.Dependencies ]))))
 
         member this.UseWebSharperRemoting(webRoot: string, ?binDirectory: string) =
             this.Use(RemotingMiddleware.AsMidFunc(webRoot, ?binDirectory = binDirectory))

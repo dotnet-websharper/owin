@@ -407,7 +407,7 @@ module private Internal =
             let d = DirectoryInfo(binDirectory)
             let refs =
                 d.DiscoverAssemblies()
-                |> Seq.choose (fun f -> try M.IO.LoadReflected(Assembly.LoadFileInfo f) with _ -> None)
+                |> Seq.choose (fun f -> M.IO.LoadReflected(Assembly.LoadFileInfo f))
                 |> List.ofSeq
             M.Info.UnionWithoutDependencies refs, DepG.FromData(refs |> Seq.map (fun m -> m.Dependencies))
 

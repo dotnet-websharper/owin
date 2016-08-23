@@ -25,7 +25,6 @@ type Env = IDictionary<string, obj>
 type AppFunc = Func<Env, Task>
 type MidFunc = Func<AppFunc, AppFunc>
 
-[<NoComparison; NoEquality>]
 type Options =
     internal {
         Debug : bool
@@ -75,7 +74,6 @@ module private Internal =
     let [<Literal>] OwinContextKey = "OwinContext"
     let [<Literal>] HttpContextKey = "HttpContext"
 
-    [<NoComparison; NoEquality>]
     type FormData =
         {
             Files : seq<HttpPostedFileBase>
@@ -350,18 +348,18 @@ module private Internal =
                             | s when s.StartsWith("/") -> s.Substring(1)
                             | s -> s
                         p ++ loc
-            new Context<'T>(
-                ApplicationPath = appPath,
-                Environment = mkEnv context httpContext,
-                Link = link,
-                Json = json,
-                Metadata = info,
-                ResolveUrl = resolveUrl context appPath,
-                ResourceContext = resContext context,
-                Request = req,
-                RootFolder = cfg.ServerRootDirectory,
+            {
+                ApplicationPath = appPath
+                Environment = mkEnv context httpContext
+                Link = link
+                Json = json
+                Metadata = info
+                ResolveUrl = resolveUrl context appPath
+                ResourceContext = resContext context
+                Request = req
+                RootFolder = cfg.ServerRootDirectory
                 UserSession = OwinCookieUserSession(context)
-            )
+            }
 
     let dispatch (cb: ContextBuilder) (s: Sitelet<'T>) (context: IOwinContext) (httpContext: HttpContext) onException : option<Task> =
         try

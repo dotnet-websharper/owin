@@ -147,7 +147,7 @@ module private Internal =
             req.Body.CopyTo body
             body.Seek(0L, SeekOrigin.Begin) |> ignore
             if IsMultipart req then
-                let parser = new MultipartFormDataParser(body, enc)
+                let parser = new MultipartFormDataParser(body, enc, leaveOpen = true)
                 let fields = [| for KeyValue(k, v) in parser.Parameters -> k, v.Data |]
                 let files =
                     [|

@@ -243,6 +243,8 @@ module private Internal =
                 P.EmbeddedResource.Create(kind, id, resource)
                 |> pu.EmbeddedPath
                 |> Res.RenderLink
+            RenderingCache = System.Collections.Concurrent.ConcurrentDictionary()
+            ResourceDependencyCache = System.Collections.Concurrent.ConcurrentDictionary()
         }
 
     // Store WebSharper user identity in the environment dictionary,

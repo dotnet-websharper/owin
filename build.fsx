@@ -2,8 +2,8 @@
 open IntelliFactory.Build
 
 let bt =
-    BuildTool().PackageId("WebSharper.Owin")
-        .VersionFrom("WebSharper")
+    BuildTool().PackageId("Zafir.Owin")
+        .VersionFrom("Zafir")
         .WithFSharpVersion(FSharpVersion.FSharp30)
         .WithFramework(fun fw -> fw.Net45)
 
@@ -12,12 +12,12 @@ let multipartParser =
         .Configuration("Release")
         .GeneratedAssemblyFiles(
             [
-                "HttpMultipartParser/bin/Release/HttpMultipartParser.dll"
+                __SOURCE_DIRECTORY__ + "/HttpMultipartParser/bin/Release/HttpMultipartParser.dll"
             ]
         )
 
 let main =
-    bt.WebSharper.Library("WebSharper.Owin")
+    bt.Zafir.Library("WebSharper.Owin")
         .SourcesFromProject()
         .References(fun r ->
             [
@@ -29,13 +29,13 @@ let main =
             ])
 
 let testSitelet =
-    bt.WebSharper.SiteletWebsite("WebSharper.Owin.Tests.Sitelet")
+    bt.Zafir.SiteletWebsite("WebSharper.Owin.Tests.Sitelet")
         .SourcesFromProject()
         .References(fun r ->
             [
                 r.Project(multipartParser)
                 r.Project(main)
-                r.NuGet("WebSharper.Html").Reference()
+                r.NuGet("Zafir.Html").Latest(true).ForceFoundVersion().Reference()
             ])
 
 let testHost =
@@ -46,7 +46,7 @@ let testHost =
                 r.Project(multipartParser)
                 r.Project(main)
                 r.Project(testSitelet)
-                r.NuGet("WebSharper").Reference()
+                r.NuGet("Zafir").Latest(true).Reference()
                 r.NuGet("Microsoft.Owin").Reference()
                 r.NuGet("Microsoft.Owin.Diagnostics").Reference()
                 r.NuGet("Microsoft.Owin.FileSystems").Reference()

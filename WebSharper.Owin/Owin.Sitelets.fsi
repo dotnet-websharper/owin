@@ -8,6 +8,8 @@ open WebSharper
 open WebSharper.Sitelets
 module M = WebSharper.Core.Metadata
 
+type DepG = WebSharper.Core.DependencyGraph.Graph
+
 /// Options to initialize a sitelet server with IAppBuilder.UseCustomSitelet.
 [<Sealed>]
 type Options =
@@ -17,7 +19,7 @@ type Options =
 
     /// Creates sitelet server options with the given WebSharper metadata.
     [<System.Obsolete "Use WebSharperOptions.">]
-    static member Create : M.Info -> Options
+    static member Create : M.Info * DepG -> Options
 
     /// Creates sitelet server options using webRoot as the root folder and
     /// loading WebSharper metadata from assemblies in binDirectory.
@@ -125,7 +127,7 @@ type WebSharperOptions<'T when 'T: equality> =
     /// The metadata to use for client code.
     /// If None, it will be loaded from BinDirectory.
     /// Default: None.
-    member Metadata : option<M.Info> with get, set
+    member MetadataAndGraph : option<M.Info * DepG> with get, set
 
     /// The sitelet to serve.
     /// Default: None.

@@ -3,12 +3,15 @@
 open System
 open System.Collections.Generic
 open System.Threading.Tasks
-open Microsoft.Owin
 open WebSharper
 open WebSharper.Sitelets
 module M = WebSharper.Core.Metadata
 
 type DepG = WebSharper.Core.DependencyGraph.Graph
+
+type Env = IDictionary<string, obj>
+type AppFunc = Func<Env, Task>
+type MidFunc = Func<AppFunc, AppFunc>
 
 /// Options to initialize a sitelet server with IAppBuilder.UseCustomSitelet.
 [<Sealed>]
@@ -45,16 +48,12 @@ type Options =
 
     /// Sets what to do when the WebSharper sitelet or remote function throws an exception.
     /// The first parameter is equal to this.Debug.
-    member WithOnException : (bool -> IOwinResponse -> exn -> Task) -> Options
+    member WithOnException : (bool -> Env -> exn -> Task) -> Options
 
     /// The default action taken when an exception is uncaught from a sitelet or remote function:
     /// set StatusCode to 500 and write the stack trace if Debug is true,
     /// or "Internal Server Error" otherwise.
-    static member DefaultOnException : bool -> IOwinResponse -> exn -> Task
-
-type Env = IDictionary<string, obj>
-type AppFunc = Func<Env, Task>
-type MidFunc = Func<AppFunc, AppFunc>
+    static member DefaultOnException : bool -> Env -> exn -> Task
 
 type RemotingMiddleware =
 
@@ -98,7 +97,7 @@ type SiteletMiddleware<'T when 'T : equality> =
     /// If binDirectory is not specified, webRoot/bin is used.
     static member AsMidFunc : webRoot: string * ?binDirectory: string -> MidFunc
 
-type InitAction = Owin.IAppBuilder * WebSharper.Core.Json.Provider * (IOwinContext -> Web.IContext) -> unit
+type InitAction = Owin.IAppBuilder * WebSharper.Core.Json.Provider * (Env -> Web.IContext) -> unit
 
 /// Options to initialize WebSharper with IAppBuilder.UseWebSharper.
 type WebSharperOptions<'T when 'T: equality> =
@@ -141,12 +140,12 @@ type WebSharperOptions<'T when 'T: equality> =
     /// The first parameter is equal to this.Debug.
     /// Default: set StatusCode to 500 and write the stack trace if Debug is true,
     /// or "Internal Server Error" otherwise.
-    member OnException : (bool -> IOwinResponse -> exn -> Task) with get, set
+    member OnException : (bool -> Env -> exn -> Task) with get, set
 
     /// The default action taken when an exception is uncaught from a sitelet or remote function:
     /// set StatusCode to 500 and write the stack trace if Debug is true,
     /// or "Internal Server Error" otherwise.
-    static member DefaultOnException : bool -> IOwinResponse -> exn -> Task
+    static member DefaultOnException : bool -> Env -> exn -> Task
 
     /// Set the sitelet to serve.
     member WithSitelet : Sitelet<'T> -> WebSharperOptions<'T>

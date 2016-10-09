@@ -1,10 +1,11 @@
+System.Environment.SetEnvironmentVariable("INTELLIFACTORY", null) // Don't sign
 #load "tools/includes.fsx"
 open IntelliFactory.Build
 
 let bt =
     BuildTool().PackageId("Zafir.Owin")
         .VersionFrom("Zafir")
-        .WithFSharpVersion(FSharpVersion.FSharp30)
+        .WithFSharpVersion(FSharpVersion.FSharp31)
         .WithFramework(fun fw -> fw.Net45)
 
 let multipartParser =
@@ -23,7 +24,9 @@ let main =
             [
                 r.Project(multipartParser)
                 r.NuGet("Owin").ForceFoundVersion().Reference()
-                r.NuGet("Microsoft.Owin").ForceFoundVersion().Reference()
+                r.NuGet("Arachne.Http").ForceFoundVersion().Reference()
+                r.NuGet("Arachne.Http.State").ForceFoundVersion().Reference()
+                r.NuGet("Arachne.Uri").ForceFoundVersion().Reference()
                 r.Assembly("System.Configuration")
                 r.Assembly "System.Web"
             ])
@@ -35,18 +38,18 @@ let testSitelet =
             [
                 r.Project(multipartParser)
                 r.Project(main)
-                r.NuGet("Zafir.Html").Latest(true).ForceFoundVersion().Reference()
+                r.NuGet("Zafir.Html").Latest(true).Reference()
             ])
 
 let testHost =
-    bt.FSharp.ConsoleExecutable("WebSharper.Owin.Tests.SelfHost")
+    bt.Zafir.Executable("WebSharper.Owin.Tests.SelfHost")
         .SourcesFromProject()
         .References(fun r ->
             [
                 r.Project(multipartParser)
                 r.Project(main)
                 r.Project(testSitelet)
-                r.NuGet("Zafir").Latest(true).Reference()
+                r.NuGet("Arachne").Reference()
                 r.NuGet("Microsoft.Owin").Reference()
                 r.NuGet("Microsoft.Owin.Diagnostics").Reference()
                 r.NuGet("Microsoft.Owin.FileSystems").Reference()
@@ -55,6 +58,7 @@ let testHost =
                 r.NuGet("Microsoft.Owin.SelfHost").Reference()
                 r.NuGet("Microsoft.Owin.StaticFiles").Reference()
                 r.NuGet("Mono.Cecil").Reference()
+                r.NuGet("Zafir.Html").Latest(true).Reference()
             ])
 
 bt.Solution [

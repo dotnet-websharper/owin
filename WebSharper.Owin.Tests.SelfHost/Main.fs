@@ -13,33 +13,31 @@ module SelfHostedServer =
     open WebSharper.Owin
     open WebSharper.Owin.Tests.Sitelet
 
-    [<EntryPoint>]
-    let Main args =
-        if args.Length = 1 then
-            let url = "http://localhost:9000/"
-            let workingDirectory = Path.Combine(Directory.GetCurrentDirectory(), args.[0])
-            try
-                use server = WebApp.Start(url, fun appB ->
-                    appB.UseStaticFiles(
-                            StaticFileOptions(
-                                FileSystem = PhysicalFileSystem(workingDirectory)))
-//                        .UseDiscoveredSitelet(workingDirectory)
-                        .UseWebSharper(
-                            WebSharperOptions(
-                                ServerRootDirectory = workingDirectory,
-                                DiscoverSitelet = true,
-                                OnException = (fun debug resp exn ->
-                                    resp.WriteAsync("[UNCAUGHT EXCEPTION]\r\n" + string exn)
-                                )
-                            )
-                        )
-                    |> ignore)
-                stdout.WriteLine("Serving {0}", url)
-                stdin.ReadLine() |> ignore
-                0
-            with e ->
-                eprintfn "Error starting website:\n%s" e.Message
-                1
-        else
-            eprintfn "Usage: OwinSample WORKING_DIRECTORY"
+    let run rootDirectory =
+        let url = "http://localhost:9000/"
+        try
+            use server = WebApp.Start(url, fun appB ->
+                appB.UseStaticFiles(
+                        StaticFileOptions(
+                            FileSystem = PhysicalFileSystem(rootDirectory)))
+                    .UseWebSharper(
+                        WebSharperOptions(
+                            ServerRootDirectory = rootDirectory,
+                            DiscoverSitelet = true,
+                            Debug = true,
+                            UseRemoting = false))
+                |> ignore)
+            printfn "Serving %s" url
+            stdin.ReadLine() |> ignore
+            0
+        with e ->
+            eprintfn "Error starting website:\n%A" e
             1
+
+    [<EntryPoint>]
+    let main = function
+        | [||] -> run (Directory.GetCurrentDirectory())
+        | [| root |] -> run root
+        | _ ->
+            eprintfn "Usage: OwinSample [ROOT_DIR]"; exit 1
+            0

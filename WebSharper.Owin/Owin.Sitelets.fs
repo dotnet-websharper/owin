@@ -20,12 +20,8 @@ module Res = WebSharper.Core.Resources
 module P = WebSharper.PathConventions
 module M = WebSharper.Core.Metadata
 
-#if ZAFIR
 type DepG = WebSharper.Core.DependencyGraph.Graph
-#endif
-
 type Uri = System.Uri
-
 type Env = IDictionary<string, obj>
 type HeaderDictionary = IDictionary<string, string[]>
 type AppFunc = Func<Env, Task>
@@ -102,27 +98,39 @@ type Options =
         {
             Debug = false
             JsonProvider = Core.Json.Provider.Create()
-#if ZAFIR
             Metadata = M.Info.Empty
             Dependencies = DepG.Empty
-#else
-            Metadata = M.Info.Create([])
-#endif
             ServerRootDirectory = dir
             UrlPrefix = ""
             RemotingServer = None
             OnException = Options.DefaultOnException
         }
 
+    static member DefaultBinDirectory =
+        Path.GetDirectoryName(typeof<Options>.Assembly.Location)
+
+module EnvKey =
+    let HttpContext = "HttpContext"
+    module WebSharper =
+        let Request = "WebSharper.Request"
+        let Context = "WebSharper.Context"
+        // Store WebSharper user identity in the environment dictionary,
+        // avoid overwriting principal set by OWIN authentication middleware
+        let User = "WebSharper.User"
+
+    let internal GetOrSet<'T> (env: Env) (key: string) (mk: Env -> 'T) =
+        match env.TryGetValue key with
+        | true, (:? 'T as x) -> x
+        | _ ->
+            let x = mk env
+            env.[key] <- x
+            x
+
 [<AutoOpen>]
 module private Internal =
 
     open System.Reflection
     open HttpMultipartParser
-
-    let [<Literal>] OwinContextKey = "OwinContext"
-    let [<Literal>] HttpContextKey = "HttpContext"
-    let [<Literal>] WebSharperRequestKey = "WebSharper.Request"
 
     [<NoComparison; NoEquality>]
     type FormData =
@@ -136,6 +144,88 @@ module private Internal =
         let tryHead (seq: seq<'t>) =
             let e = seq.GetEnumerator()
             if e.MoveNext() then Some e.Current else None
+
+    let tryFindCookieHeader (headers : HeaderDictionary) =
+        if headers.ContainsKey("Cookie") then
+            headers.["Cookie"]
+            |> Array.map Cookie.parse
+            |> Some
+        else None
+
+    type OwinCookieUserSession(ctx: Env) =
+        let requestHeaders : HeaderDictionary = unbox ctx.["owin.RequestHeaders"]
+        let responseHeaders : HeaderDictionary = unbox ctx.["owin.ResponseHeaders"]
+
+        let refresh (cookie: string) =
+            match cookie with
+            | null -> ctx.[EnvKey.WebSharper.User] <- None
+            | cookie ->
+                let ticket = FormsAuthentication.Decrypt cookie
+                let principal = GenericPrincipal(FormsIdentity(ticket), [||])
+                ctx.[EnvKey.WebSharper.User] <- Some principal
+            |> ignore 
+
+        let ensureUserHasBeenRefreshed () = 
+            if ctx.ContainsKey(EnvKey.WebSharper.User) |> not then 
+                // Using `try ... with` because `FormsAuthentication.Decrypt`
+                // throws an exception when there is a cookie but its format is invalid
+                try //refresh ctx.Request.Cookies.[FormsAuthentication.FormsCookieName]
+                    match tryFindCookieHeader requestHeaders with
+                    | Some cookies ->
+                        let c =
+                            cookies
+                            |> List.ofArray
+                            |> List.collect (fun (Cookie pairs) -> pairs)
+                            |> List.tryFind (fun (Pair(State.Name k, _)) ->
+                                k = FormsAuthentication.FormsCookieName)
+                        match c with
+                        | Some (Pair(_, Value v)) -> refresh v
+                        | None -> refresh null
+                    | None -> refresh null
+                with _ -> refresh null
+
+        interface IUserSession with
+
+            member this.IsAvailable = true
+
+            member this.GetLoggedInUser() =
+                async {
+                    ensureUserHasBeenRefreshed()
+                    match unbox<GenericPrincipal option> ctx.[EnvKey.WebSharper.User] with
+                    | None -> return None
+                    | Some x ->
+                        if x.Identity.IsAuthenticated then
+                            return Some x.Identity.Name
+                        else return None
+                }
+
+            member this.LoginUser(user, ?persistent) =
+                async {
+                    let persistent = defaultArg persistent false
+                    let cookie = FormsAuthentication.GetAuthCookie(user, persistent)
+                    let setCookie =
+                        SetCookie(
+                            Pair(State.Name cookie.Name, Value cookie.Value),
+                            Attributes [
+                                if not (String.IsNullOrEmpty cookie.Domain) then yield Domain (Domain.parse cookie.Domain)
+                                if persistent then yield Expires cookie.Expires
+                                if not (String.IsNullOrEmpty cookie.Path) then yield Path cookie.Path
+                                if cookie.HttpOnly then yield HttpOnly
+                                if cookie.Secure then yield Secure
+                            ])
+                    Environment.appendHeader ("Set-Cookie", SetCookie.format setCookie) responseHeaders
+                    return refresh cookie.Value
+                }
+
+            member this.Logout() =
+                async {
+                    let setCookie =
+                        SetCookie(
+                            Pair(State.Name FormsAuthentication.FormsCookieName, Value ""),
+                            Attributes [ Expires (DateTime.Now.AddDays(-1.)) ])
+                    Environment.appendHeader ("Set-Cookie", SetCookie.format setCookie) responseHeaders
+                    return refresh null
+                }
 
     module O2W =
 
@@ -169,13 +259,6 @@ module private Internal =
                     }
                 )
             | None -> Http.ParameterCollection(Seq.empty)
-
-        let tryFindCookieHeader (headers : HeaderDictionary) =
-            if headers.ContainsKey("Cookie") then
-                headers.["Cookie"]
-                |> Array.map Cookie.parse
-                |> Some
-            else None
 
         let Cookies (cookies : Cookie[] option) : HttpCookieCollection =
             let coll = HttpCookieCollection()
@@ -261,12 +344,24 @@ module private Internal =
             }
 
         let Request (env: Env) : Http.Request =
-            match env.TryGetValue WebSharperRequestKey with
-            | true, (:? Http.Request as req) -> req
-            | _ ->
-                let req = request env
-                env.[WebSharperRequestKey] <- req
-                req
+            EnvKey.GetOrSet<Http.Request> env EnvKey.WebSharper.Request request
+
+        let SetHttpContext (env: Env) : unit =
+            match HttpContext.Current with
+            | null -> ()
+            | x -> env.[EnvKey.HttpContext] <- HttpContextWrapper(x)
+
+        let SimpleContext rootDir (env: Env) : Web.IContext =
+            EnvKey.GetOrSet<Web.IContext> env EnvKey.WebSharper.Context <| fun env ->
+                SetHttpContext env
+                let req = Request env
+                let session = lazy new OwinCookieUserSession(env)
+                { new IContext with
+                    member ctx.Environment = env
+                    member ctx.RequestUri = req.Uri
+                    member ctx.RootFolder = rootDir
+                    member ctx.UserSession = session.Value :> _
+                }
 
     module W2O =
 
@@ -299,9 +394,9 @@ module private Internal =
                     (onException out e).Wait()
             )
 
-    let buildResourceContext cfg (context: Env) : Res.Context =
+    let buildResourceContext cfg (env: Env) : Res.Context =
         let isDebug = cfg.Debug
-        let pu = P.PathUtility.VirtualPaths(unbox context.["owin.RequestPathBase"])
+        let pu = P.PathUtility.VirtualPaths(unbox env.["owin.RequestPathBase"])
         {
             DebuggingEnabled = isDebug
             DefaultToHttp = false
@@ -310,11 +405,7 @@ module private Internal =
                 | null -> None
                 | x -> Some x
             GetAssemblyRendering = fun name ->
-#if ZAFIR
                 let aid = P.AssemblyId.Create(name)
-#else
-                let aid = P.AssemblyId.Create(name.FullName)
-#endif
                 let url = if isDebug then pu.JavaScriptPath(aid) else pu.MinifiedJavaScriptPath(aid)
                 Res.RenderLink url
             GetWebResourceRendering = fun ty resource ->
@@ -329,92 +420,6 @@ module private Internal =
             RenderingCache = System.Collections.Concurrent.ConcurrentDictionary()
             ResourceDependencyCache = System.Collections.Concurrent.ConcurrentDictionary()
         }
-
-    // Store WebSharper user identity in the environment dictionary,
-    // avoid overwriting principal set by OWIN authentication middleware
-    let [<Literal>] WebSharperUserKey = "WebSharper.User"
-
-    type OwinCookieUserSession(ctx: Env) =
-        let requestHeaders : HeaderDictionary = unbox ctx.["owin.RequestHeaders"]
-        let responseHeaders : HeaderDictionary = unbox ctx.["owin.ResponseHeaders"]
-
-        let refresh (cookie: string) =
-            match cookie with
-            | null -> ctx.[WebSharperUserKey] <- None
-            | cookie ->
-                let ticket = FormsAuthentication.Decrypt cookie
-                let principal = GenericPrincipal(FormsIdentity(ticket), [||])
-                ctx.[WebSharperUserKey] <- Some principal
-            |> ignore 
-
-        let ensureUserHasBeenRefreshed () = 
-            if ctx.ContainsKey(WebSharperUserKey) |> not then 
-                // Using `try ... with` because `FormsAuthentication.Decrypt`
-                // throws an exception when there is a cookie but its format is invalid
-                try //refresh ctx.Request.Cookies.[FormsAuthentication.FormsCookieName]
-                    match O2W.tryFindCookieHeader requestHeaders with
-                    | Some cookies ->
-                        let c =
-                            cookies
-                            |> List.ofArray
-                            |> List.collect (fun (Cookie pairs) -> pairs)
-                            |> List.tryFind (fun (Pair(State.Name k, _)) ->
-                                k = FormsAuthentication.FormsCookieName)
-                        match c with
-                        | Some (Pair(_, Value v)) -> refresh v
-                        | None -> refresh null
-                    | None -> refresh null
-                with _ -> refresh null
-
-        interface IUserSession with
-
-            member this.IsAvailable = true
-
-            member this.GetLoggedInUser() =
-                async {
-                    ensureUserHasBeenRefreshed()
-                    match unbox<GenericPrincipal option> ctx.[WebSharperUserKey] with
-                    | None -> return None
-                    | Some x ->
-                        if x.Identity.IsAuthenticated then
-                            return Some x.Identity.Name
-                        else return None
-                }
-
-            member this.LoginUser(user, ?persistent) =
-                async {
-                    let persistent = defaultArg persistent false
-                    let cookie = FormsAuthentication.GetAuthCookie(user, persistent)
-                    let setCookie =
-                        SetCookie(
-                            Pair(State.Name cookie.Name, Value cookie.Value),
-                            Attributes [
-                                if not (String.IsNullOrEmpty cookie.Domain) then yield Domain (Domain.parse cookie.Domain)
-                                if persistent then yield Expires cookie.Expires
-                                if not (String.IsNullOrEmpty cookie.Path) then yield Path cookie.Path
-                                if cookie.HttpOnly then yield HttpOnly
-                                if cookie.Secure then yield Secure
-                            ])
-                    Environment.appendHeader ("Set-Cookie", SetCookie.format setCookie) responseHeaders
-                    return refresh cookie.Value
-                }
-
-            member this.Logout() =
-                async {
-                    let setCookie =
-                        SetCookie(
-                            Pair(State.Name FormsAuthentication.FormsCookieName, Value ""),
-                            Attributes [ Expires (DateTime.Now.AddDays(-1.)) ])
-                    Environment.appendHeader ("Set-Cookie", SetCookie.format setCookie) responseHeaders
-                    return refresh null
-                }
-
-    let mkEnv (owinContext: Env) (httpContext: HttpContext) =
-        owinContext.[OwinContextKey] <- owinContext
-        match httpContext with
-        | null -> ()
-        | x -> owinContext.[HttpContextKey] <- HttpContextWrapper(x)
-        owinContext
 
     [<Sealed>]
     type ContextBuilder(cfg) =
@@ -434,14 +439,14 @@ module private Internal =
                 | _ -> b
             VirtualPathUtility.Combine(a, b)
 
-        let resolveUrl context appPath u =
+        let resolveUrl appPath u =
             if VirtualPathUtility.IsAppRelative(u) then
                 VirtualPathUtility.ToAbsolute(u, appPath)
             else
                 u
 
-        member b.GetContext<'T when 'T : equality>(site: Sitelet<'T>, req: Http.Request, context: Env, httpContext: HttpContext) : Context<'T> =
-            let appPath = unbox context.["owin.RequestPathBase"]
+        member b.GetContext<'T when 'T : equality>(site: Sitelet<'T>, req: Http.Request, env: Env) : Context<'T> =
+            let appPath = unbox env.["owin.RequestPathBase"]
             let link = site.Router.Link
             let prefix = cfg.UrlPrefix
             let p = appPath ++ prefix
@@ -456,38 +461,41 @@ module private Internal =
                             | s when s.StartsWith("/") -> s.Substring(1)
                             | s -> s
                         p ++ loc
-            new Context<'T>(
-                ApplicationPath = appPath,
-                Environment = mkEnv context httpContext,
-                Link = link,
-                Json = json,
-                Metadata = info,
-                Dependencies = graph,
-                ResolveUrl = resolveUrl context appPath,
-                ResourceContext = resContext context,
-                Request = req,
-                RootFolder = cfg.ServerRootDirectory,
-                UserSession = OwinCookieUserSession(context)
-            )
+            EnvKey.GetOrSet<Context<'T>> env EnvKey.WebSharper.Context <| fun env ->
+                O2W.SetHttpContext env
+                new Context<'T>(
+                    ApplicationPath = appPath,
+                    Environment = env,
+                    Link = link,
+                    Json = json,
+                    Metadata = info,
+                    Dependencies = graph,
+                    ResolveUrl = resolveUrl appPath,
+                    ResourceContext = resContext env,
+                    Request = req,
+                    RootFolder = cfg.ServerRootDirectory,
+                    UserSession = OwinCookieUserSession(env)
+                )
 
-    let dispatch (cb: ContextBuilder) (s: Sitelet<'T>) (context: Env) (httpContext: HttpContext) onException : option<Task> =
+    let dispatch (cb: ContextBuilder) (s: Sitelet<'T>) (env: Env) onException : option<Task> =
         try
-            let request = O2W.Request context
-            let ctx = cb.GetContext(s, request, context, httpContext)
+            let request = O2W.Request env
+            let ctx = cb.GetContext(s, request, env)
             s.Router.Route(request)
             |> Option.map (fun action ->
                 let content = s.Controller.Handle(action)
                 let response = Content.ToResponse content ctx |> Async.StartAsTask
-                W2O.WriteResponse response context onException)
+                W2O.WriteResponse response env onException)
         with e ->
-            Some (onException context e)
+            Some (onException env e)
 
     type Assembly =
 
-        static member LoadFileInfo(info: FileInfo) =
-            let name = AssemblyName.GetAssemblyName(info.FullName)
+        static member LoadFileInfo(p: string) =
+            let fn = Path.GetFullPath(p)
+            let name = AssemblyName.GetAssemblyName(fn)
             match Assembly.TryLoad(name) with
-            | None -> Assembly.LoadFrom(info.FullName)
+            | None -> Assembly.LoadFrom(fn)
             | Some a -> a
 
         static member TryLoad(name: AssemblyName) =
@@ -497,36 +505,20 @@ module private Internal =
                 | a -> Some a
             with _ -> None
 
-    type DirectoryInfo with
-
-        member dir.DiscoverAssemblies() =
-            let ls pat = dir.EnumerateFiles(pat)
-            let ( @ ) = Seq.append
-            ls "*.dll" @ ls "*.exe"
-
-    type M.Info with
-
-        static member LoadFromBinDirectory(binDirectory: string) =
-            let d = DirectoryInfo(binDirectory)
-            let refs =
-                d.DiscoverAssemblies()
-                |> Seq.choose (fun f -> M.IO.LoadReflected(Assembly.LoadFileInfo f))
-                |> List.ofSeq
-            M.Info.UnionWithoutDependencies refs, DepG.FromData(refs |> Seq.map (fun m -> m.Dependencies))
-
-        static member LoadFromWebRoot(webRoot: string) =
-            M.Info.LoadFromBinDirectory(Path.Combine(webRoot, "bin"))
+    let DiscoverAssemblies (path: string) =
+        let ls pat = Directory.GetFiles(path, pat)
+        let ( @ ) = Array.append
+        ls "*.dll" @ ls "*.exe"
+        |> Array.choose (fun p ->
+            try Some (Assembly.LoadFileInfo(p))
+            with e -> None)
 
 type Options with
 
     static member Create(meta, graph) =
         let dir = System.IO.Directory.GetCurrentDirectory()
-#if ZAFIR
         let json = Core.Json.Provider.CreateTyped meta
         let remotingServer = Rem.Server.Create meta json
-#else
-        let remotingServer = Rem.Server.Create None meta
-#endif
         {
             Debug = false
             JsonProvider = json
@@ -540,48 +532,40 @@ type Options with
 
     member o.WithRunRemoting(b) =
         let server =
-#if ZAFIR
             if b then Some (Rem.Server.Create o.Metadata o.JsonProvider) else None
-#else
-            if b then Some (Rem.Server.Create None o.Metadata) else None
-#endif
         { o with RemotingServer = server }
 
-    static member Create(webRoot, ?binDirectory) =
-        let binDirectory = defaultArg binDirectory (Path.Combine(webRoot, "bin"))
-        let meta, graph = M.Info.LoadFromBinDirectory(binDirectory)
-        Options.Create(meta, graph)
+    static member Create(webRoot, ?binDirectory: string) =
+        Options.Create(Shared.Metadata, Shared.Dependencies)
             .WithServerRootDirectory(webRoot)
 
-    member o.WithBinDirectory(dir) =
-        let meta, graph = M.Info.LoadFromBinDirectory dir
-        { o with Metadata = meta; Dependencies = graph }
-
-type RemotingMiddleware(next: AppFunc, webRoot: string, server: Rem.Server, onException: Env -> exn -> Task) =
+type RemotingMiddleware(next: AppFunc, webRoot: string, server: Rem.Server, onException: Env -> exn -> Task, alwaysSetContext: bool) =
 
     member this.Invoke(env: Env) =
         let req = O2W.Request env
-        let httpContext = HttpContext.Current
-        let respBody : Stream = unbox env.["owin.ResponseBody"]
-        let respHeaders = unbox<IDictionary<string, string[]>> env.["owin.ResponseHeaders"]
-        let addHeader k v =
+        if alwaysSetContext then O2W.SimpleContext webRoot env |> ignore
+        let respHeaders = env.["owin.ResponseHeaders"] :?> HeaderDictionary
+        let addRespHeader k v =
             respHeaders.[k] <-
                 match respHeaders.TryGetValue k with
                 | true, coll -> Array.append coll v
                 | false, _ -> v
-        let addHeaders headers =
+        let addRespHeaders headers =
             for k, vs in Seq.groupBy fst headers do
-                addHeader k [| for _, v in vs -> v |]
-        let getHeader k = req.Headers |> Seq.tryPick (fun h -> if h.Name = k then Some h.Value else None)
-        if Rem.IsRemotingRequest getHeader then
+                addRespHeader k [| for _, v in vs -> v |]
+        let getReqHeader k =
+            match (env.["owin.RequestHeaders"] :?> HeaderDictionary).TryGetValue k with
+            | true, xs when Array.length xs > 0 -> Some xs.[0]
+            | _ -> None
+        if Rem.IsRemotingRequest getReqHeader then
             async {
                 try
                     match WebSharper.Web.RpcHandler.CorsAndCsrfCheck (unbox env.["owin.RequestMethod"]) req.Uri
                             (fun k -> match req.Cookies.[k] with null -> None | x -> Some x.Value)
-                            getHeader
+                            getReqHeader
                             (fun k v ->
                                 let expires = System.DateTime.UtcNow.AddYears(1000).ToString("R")
-                                addHeader "Set-Cookie" [| sprintf "%s=%s; Expires=%s" k v expires |])
+                                addRespHeader "Set-Cookie" [| sprintf "%s=%s; Expires=%s" k v expires |])
                         with
                     | WebSharper.Web.Error (code, msg) ->
                         env.["owin.ResponseStatusCode"] <- code
@@ -589,29 +573,22 @@ type RemotingMiddleware(next: AppFunc, webRoot: string, server: Rem.Server, onEx
                         use w = new StreamWriter(env.["owin.ResponseBody"] :?> Stream)
                         w.Write msg
                     | WebSharper.Web.Preflight headers ->
-                        addHeaders headers
+                        addRespHeaders headers
                     | WebSharper.Web.Ok headers ->
-                        addHeaders headers
+                        addRespHeaders headers
+                        let ctx = O2W.SimpleContext webRoot env
                         use reader = new StreamReader(req.Body)
-                        let session = new OwinCookieUserSession(env)
-                        let ctx =
-                            { new Web.IContext with
-                                member this.UserSession = session :> _
-                                member this.RequestUri = req.Uri
-                                member this.RootFolder = webRoot
-                                member this.Environment = mkEnv env httpContext }
                         let! body = reader.ReadToEndAsync() |> Async.AwaitTask
                         let! resp =
                             server.HandleRequest(
                                 {
                                     Body = body
-                                    Headers = getHeader
+                                    Headers = getReqHeader
                                 }, ctx)
                         env.["owin.ResponseStatusCode"] <- box 200
-                        let respHeaders : HeaderDictionary = unbox env.["owin.ResponseHeaders"]
                         respHeaders.["Content-Type"] <- [|resp.ContentType|]
                         let bytes = Text.Encoding.UTF8.GetBytes(resp.Content)
-                        respBody.Write(bytes, 0, bytes.Length)
+                        (env.["owin.ResponseBody"] :?> Stream).Write(bytes, 0, bytes.Length)
                 with e ->
                     return! onException env e |> Async.AwaitIAsyncResult |> Async.Ignore
             }
@@ -619,28 +596,41 @@ type RemotingMiddleware(next: AppFunc, webRoot: string, server: Rem.Server, onEx
             :> Task
         else next.Invoke(env)
 
+    new (next, webRoot, server, onException) =
+        new RemotingMiddleware(next, webRoot, server, onException, true)
+
     // (options)
 
     new (next, options: Options) =
         new RemotingMiddleware(next, options.ServerRootDirectory, options.RemotingServer.Value,
             options.OnException options.Debug)
 
-    static member AsMidFunc(options: Options) =
-        MidFunc(fun next ->
-            AppFunc(RemotingMiddleware(next, options).Invoke))
+    new (next, options: Options, alwaysSetContext) =
+        new RemotingMiddleware(next, options.ServerRootDirectory, options.RemotingServer.Value,
+            options.OnException options.Debug, alwaysSetContext)
 
-    // (webRoot, ?binDirectory)
+    static member AsMidFunc(options: Options) =
+        match options.RemotingServer with
+        | Some rem ->
+            MidFunc(fun next ->
+                AppFunc(RemotingMiddleware(next, options.ServerRootDirectory, rem,
+                            options.OnException options.Debug).Invoke))
+        | None -> MidFunc(fun next -> AppFunc(fun env -> next.Invoke(env)))
+
+    // (webRoot)
 
     static member UseRemoting(webRoot: string, ?binDirectory: string) =
-        let meta, graph =
+        // Make sure that all relevant assemblies are loaded _before_ calling Shared.Metadata
+        let _assemblies =
             match binDirectory with
-            | None -> M.Info.LoadFromWebRoot(webRoot)
-            | Some binDirectory -> M.Info.LoadFromBinDirectory(binDirectory)
-        let o = Options.Create(meta, graph).WithServerRootDirectory(webRoot)
+            | Some d -> d
+            | None -> Options.DefaultBinDirectory
+            |> DiscoverAssemblies
+        let o = Options.Create(Shared.Metadata, Shared.Dependencies).WithServerRootDirectory(webRoot)
         fun next -> new RemotingMiddleware(next, o)
 
     static member AsMidFunc(webRoot: string, ?binDirectory: string) =
-        let mw = RemotingMiddleware.UseRemoting(webRoot, ?binDirectory = binDirectory)
+        let mw = RemotingMiddleware.UseRemoting(webRoot)
         MidFunc(fun next -> AppFunc(mw(next).Invoke))
 
 type SiteletMiddleware<'T when 'T : equality>(next: AppFunc, config: Options, sitelet: Sitelet<'T>) =
@@ -648,12 +638,11 @@ type SiteletMiddleware<'T when 'T : equality>(next: AppFunc, config: Options, si
 
     let appFunc =
         let siteletAppFunc = AppFunc(fun env ->
-            let httpContext = HttpContext.Current // non-null if running on top of asp.net
-            match dispatch cb sitelet env httpContext (config.OnException config.Debug) with
+            match dispatch cb sitelet env (config.OnException config.Debug) with
             | Some t -> t
             | None -> next.Invoke(env))
         if config.RemotingServer.IsSome then
-            AppFunc(RemotingMiddleware(siteletAppFunc, config).Invoke)
+            AppFunc(RemotingMiddleware(siteletAppFunc, config, false).Invoke)
         else
             siteletAppFunc
 
@@ -662,111 +651,83 @@ type SiteletMiddleware<'T when 'T : equality>(next: AppFunc, config: Options, si
 
     static member AsMidFunc(config: Options, sitelet: Sitelet<'T>) =
         MidFunc(fun next ->
-            AppFunc(SiteletMiddleware(next, config, sitelet).Invoke))
+            let m = SiteletMiddleware(next, config, sitelet)
+            AppFunc(m.Invoke))
+
+    static member DiscoverSitelet(assemblies) =
+        match HttpModule.DiscoverSitelet assemblies with
+        | Some this -> this
+        | None -> failwith "Failed to discover sitelet assemblies"
 
     static member UseDiscoveredSitelet(webRoot: string, ?binDirectory: string) =
-        let binDirectory = defaultArg binDirectory (Path.Combine(webRoot, "bin"))
-        let binDir = DirectoryInfo(binDirectory)
-        let ok =
-            try
-                binDir.DiscoverAssemblies()
-                |> Seq.choose (fun p ->
-                    try Some (Assembly.LoadFileInfo(p))
-                    with e -> None)
-                |> HttpModule.DiscoverSitelet
-                |> Option.map (fun sitelet ->
-                    let options = Options.Create(webRoot, binDirectory = binDirectory)
-                    fun next -> SiteletMiddleware<obj>(next, options, sitelet))
-            with :? System.Reflection.ReflectionTypeLoadException as exn ->
-                failwithf "%A" (exn.LoaderExceptions)
-        match ok with
-        | Some this -> this
-        | None -> failwith "Failed to discover sitelet assemblies"
+        let binDirectory =
+            match binDirectory with
+            | None -> Options.DefaultBinDirectory
+            | Some d -> d
+        let assemblies = DiscoverAssemblies binDirectory
+        let sitelet = SiteletMiddleware<'T>.DiscoverSitelet(assemblies)
+        let options = Options.Create(webRoot)
+        fun next -> SiteletMiddleware<obj>(next, options, sitelet)
 
-    static member UseDiscoveredSitelet(config: Options, binDirectory: string) =
-        let binDir = DirectoryInfo(binDirectory)
-        let ok =
-            try
-                binDir.DiscoverAssemblies()
-                |> Seq.choose (fun p ->
-                    try Some (Assembly.LoadFileInfo(p))
-                    with e -> None)
-                |> HttpModule.DiscoverSitelet
-                |> Option.map (fun sitelet ->
-                    fun next -> SiteletMiddleware<obj>(next, config, sitelet))
-            with :? System.Reflection.ReflectionTypeLoadException as exn ->
-                failwithf "%A" (exn.LoaderExceptions)
-        match ok with
-        | Some this -> this
-        | None -> failwith "Failed to discover sitelet assemblies"
-
-    static member AsMidFunc(webRoot: string, ?binDirectory: string) =
+    static member AsMidFunc(webRoot: string, ?binDirectory) =
         let mw = SiteletMiddleware<obj>.UseDiscoveredSitelet(webRoot, ?binDirectory = binDirectory)
         MidFunc(fun next -> AppFunc(mw(next).Invoke))
 
-type InitAction = Owin.IAppBuilder * WebSharper.Core.Json.Provider * (Env -> Web.IContext) -> unit
+type InitAction = MidFunc * WebSharper.Core.Json.Provider * (Env -> Web.IContext) -> unit
 
 type WebSharperOptions<'T when 'T : equality>() = 
     let mutable binDir = None
-    let mutable initActions = []
-
     member val ServerRootDirectory = System.IO.Directory.GetCurrentDirectory() with get, set
     member this.BinDirectory
-        with get () = 
+        with get () =
             match binDir with
-            | None -> System.IO.Path.Combine(this.ServerRootDirectory, "bin")
-            | Some d -> d
+            | None -> Options.DefaultBinDirectory
+            | Some dir -> dir
         and set dir = binDir <- Some dir
-
     member val UseRemoting = true with get, set
     member val UrlPrefix = "" with get, set
     member val Debug = false with get, set
     member val Sitelet = None with get, set
     member val DiscoverSitelet = false with get, set
+    member this.DiscoverSiteletIn =
+        if this.DiscoverSitelet then Some this.BinDirectory else None
     member val MetadataAndGraph = None with get, set
     member val OnException = Options.DefaultOnException with get, set
 
     static member DefaultOnException debug response exn =
         Options.DefaultOnException debug response exn
-    
-    member internal this.InitActions = initActions
 
     member this.WithSitelet(sitelet: Sitelet<'T>) =
         this.Sitelet <- Some sitelet 
         this
 
-    member this.WithInitAction(action) = 
-        initActions <- action :: initActions   
-        this  
+    member this.BuildConfig() =
+        // It's important to call DiscoverAssemblies before Shared.Metadata
+        // because DiscoverAssemblies loads assemblies into the AppDomain
+        // from which Metadata will then have to load metadata.
+        let assemblies = DiscoverAssemblies this.BinDirectory
 
-    member internal this.Run(builder: IAppBuilder) =
-        let meta, graph = 
+        let sitelet =
+            if this.Sitelet.IsSome then
+                Some (WebSharper.Sitelets.Sitelet.Upcast this.Sitelet.Value)
+            elif this.DiscoverSitelet then
+                HttpModule.DiscoverSitelet(assemblies)
+            else None
+
+        let meta, graph, json = 
             match this.MetadataAndGraph with
-            | Some m -> m
-            | None ->
-                if this.UseRemoting || Option.isSome this.Sitelet || this.DiscoverSitelet then
-                    M.Info.LoadFromBinDirectory(this.BinDirectory)
-                else
-#if ZAFIR
-                    M.Info.Empty, DepG.Empty
-#else
-                    M.Info.Create([])
-#endif
+            | Some (m, g) -> m, g, Core.Json.Provider.CreateTyped m
+            | None -> Shared.Metadata, Shared.Dependencies, Shared.Json
              
-        let remotingServer, jsonProvider =
+        let remotingServer =
             if this.UseRemoting then
-#if ZAFIR
-                let json = Core.Json.Provider.CreateTyped meta
-                let rem = Rem.Server.Create meta json
-#else
-                let rem = Rem.Server.Create None meta
-#endif
-                Some rem, rem.JsonProvider
-            else None, Core.Json.Provider.Create()
+                Rem.Server.Create meta json
+                |> Some
+            else None
 
-        let config = {
+        sitelet, {
             Debug = this.Debug
-            JsonProvider = jsonProvider
+            JsonProvider = json
             Metadata = meta
             Dependencies = graph
             ServerRootDirectory = this.ServerRootDirectory
@@ -775,28 +736,11 @@ type WebSharperOptions<'T when 'T : equality>() =
             OnException = this.OnException
         }
 
-        match this.Sitelet with
-        | Some sitelet -> builder.Use(SiteletMiddleware<'T>.AsMidFunc(config, sitelet)) |> ignore
-        | _ ->
-            if this.DiscoverSitelet then
-                let mw = SiteletMiddleware<obj>.UseDiscoveredSitelet(config, this.BinDirectory)
-                builder.Use(MidFunc(fun next -> AppFunc(mw(next).Invoke))) |> ignore
-            elif this.UseRemoting then
-                builder.Use(RemotingMiddleware.AsMidFunc(config)) |> ignore    
-
-        if not (List.isEmpty this.InitActions) then
-            let mkCtx (context: Env) =
-                let env = mkEnv context HttpContext.Current
-                let req = env.[WebSharperRequestKey] :?> Http.Request
-                let session = new OwinCookieUserSession(context)
-                { new IContext with
-                    member ctx.Environment = env
-                    member ctx.RequestUri = req.Uri
-                    member ctx.RootFolder = this.ServerRootDirectory
-                    member ctx.UserSession = session :> _
-                }
-            for a in this.InitActions do
-                a(builder, jsonProvider, mkCtx)
+    member this.AsMidFunc() =
+        let sitelet, config = this.BuildConfig()
+        match sitelet with
+        | Some sitelet -> SiteletMiddleware<obj>.AsMidFunc(config, sitelet)
+        | None -> RemotingMiddleware.AsMidFunc(config)
 
 [<AutoOpen>]
 module Extensions =
@@ -805,24 +749,17 @@ module Extensions =
         member this.UseWebSharperRemoting(webRoot: string, meta: M.Info) =
             this.Use(RemotingMiddleware.AsMidFunc(Options.Create(meta, DepG.FromData([ meta.Dependencies ])).WithServerRootDirectory(webRoot)))
 
-        member this.UseWebSharperRemoting(meta: M.Info) =
-            this.Use(RemotingMiddleware.AsMidFunc(Options.Create(meta, DepG.FromData([ meta.Dependencies ]))))
-
         member this.UseWebSharperRemoting(webRoot: string, ?binDirectory: string) =
             this.Use(RemotingMiddleware.AsMidFunc(webRoot, ?binDirectory = binDirectory))
 
-        member this.UseWebSharperRemotingFromBin(binDirectory: string) =
-            this.Use(RemotingMiddleware.AsMidFunc(binDirectory, binDirectory = binDirectory))
-
-        member this.UseSitelet(webRoot: string, sitelet, ?binDirectory) =
+        member this.UseSitelet(webRoot: string, sitelet, ?binDirectory: string) =
             this.UseCustomSitelet(Options.Create(webRoot, ?binDirectory = binDirectory), sitelet)
 
         member this.UseCustomSitelet(config: Options, sitelet: Sitelet<'T>) =
             this.Use(SiteletMiddleware<'T>.AsMidFunc(config, sitelet))
 
-        member this.UseDiscoveredSitelet(webRoot: string, ?binDirectory) =
+        member this.UseDiscoveredSitelet(webRoot: string, ?binDirectory: string) =
             this.Use(SiteletMiddleware<obj>.AsMidFunc(webRoot, ?binDirectory = binDirectory))
 
         member this.UseWebSharper(options: WebSharperOptions<'T>) =
-            options.Run(this)
-            this
+            this.Use(options.AsMidFunc())

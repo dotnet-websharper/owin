@@ -24,8 +24,7 @@ module SelfHostedServer =
                         WebSharperOptions(
                             ServerRootDirectory = rootDirectory,
                             DiscoverSitelet = true,
-                            Debug = true,
-                            UseRemoting = false))
+                            Debug = true))
                 |> ignore)
             printfn "Serving %s" url
             stdin.ReadLine() |> ignore

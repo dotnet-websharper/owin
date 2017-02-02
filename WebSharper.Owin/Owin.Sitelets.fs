@@ -456,10 +456,10 @@ type RemotingMiddleware(next: AppFunc, webRoot: string, server: Rem.Server, onEx
         let httpContext = HttpContext.Current
         let headers =
             O2W.Headers context.Request.Headers
-            |> Seq.map (fun h -> (h.Name, h.Value))
+            |> Seq.map (fun h -> (h.Name.ToLowerInvariant(), h.Value))
             |> Map.ofSeq
-        let getHeader k =
-            Map.tryFind k headers
+        let getHeader (k: string) =
+            Map.tryFind (k.ToLowerInvariant()) headers
         if Rem.IsRemotingRequest getHeader then
             async {
                 try
@@ -469,8 +469,9 @@ type RemotingMiddleware(next: AppFunc, webRoot: string, server: Rem.Server, onEx
                             (fun k v -> context.Response.Cookies.Append(k, v,
                                             CookieOptions(Expires = Nullable(System.DateTime.UtcNow.AddYears(1000)))))
                             with
-                    | WebSharper.Web.Error (code, _) ->
+                    | WebSharper.Web.Error (code, _, body) ->
                         context.Response.StatusCode <- code
+                        context.Response.Write(body)
                     | WebSharper.Web.Preflight headers ->
                         headers |> List.iter (fun (k, v) -> context.Response.Headers.Add(k, [|v|]))
                     | WebSharper.Web.Ok headers ->

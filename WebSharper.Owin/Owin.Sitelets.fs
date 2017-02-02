@@ -476,8 +476,9 @@ type RemotingMiddleware(next: AppFunc, webRoot: string, server: Rem.Server, onEx
                             (fun k v -> context.Response.Cookies.Append(k, v,
                                             CookieOptions(Expires = Nullable(System.DateTime.UtcNow.AddYears(1000)))))
                             with
-                    | WebSharper.Web.Error (code, _) ->
+                    | WebSharper.Web.Error (code, _, body) ->
                         context.Response.StatusCode <- code
+                        context.Response.Write(body)
                     | WebSharper.Web.Preflight headers ->
                         headers |> List.iter (fun (k, v) -> context.Response.Headers.Add(k, [|v|]))
                     | WebSharper.Web.Ok headers ->

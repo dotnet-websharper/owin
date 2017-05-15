@@ -21,7 +21,7 @@ type Options =
 
     /// Creates sitelet server options using webRoot as the root folder and
     /// loading WebSharper metadata from assemblies in binDirectory.
-    /// If binDirectory is not specified, webRoot/bin is used.
+    /// If binDirectory is not specified, the folder containing WebSharper.Owin.dll is used.
     [<System.Obsolete "Use WebSharperOptions.">]
     static member Create : webRoot: string * ?binDirectory: string -> Options
 
@@ -54,6 +54,29 @@ type Env = IDictionary<string, obj>
 type AppFunc = Func<Env, Task>
 type MidFunc = Func<AppFunc, AppFunc>
 
+/// The keys that WebSharper sets in the Owin environment.
+module EnvKey =
+
+    /// The ASP.NET HttpContext, if any.
+    /// Type: System.Web.HttpContextBase.
+    val HttpContext : string
+
+    module WebSharper =
+
+        /// The parsed Sitelets request.
+        /// Type: WebSharper.Sitelets.Http.Request.
+        val Request : string
+
+        /// The WebSharper context.
+        /// Type: WebSharper.Web.IContext.
+        /// If the request was recognized by a sitelet, then the concrete type is
+        /// WebSharper.Sitelets.Context<'Endpoint>.
+        val Context : string
+
+        /// The logged-in user principal, if any.
+        /// Type: option<System.Security.Principal.GenericPrincipal>.
+        val User : string
+
 type RemotingMiddleware =
 
     member Invoke : Env -> Task
@@ -68,12 +91,12 @@ type RemotingMiddleware =
     /// Runs the WebSharper Remoting service, allowing WebSharper-compiled
     /// client-side code to invoke [<Rpc>]-annotated server-side functions.
     /// WebSharper metadata is loaded from binDirectory.
-    /// If binDirectory is not specified, webRoot/bin is used.
+    /// If binDirectory is not specified, the folder containing WebSharper.Owin.dll is used.
     static member UseRemoting : webRoot: string * ?binDirectory: string -> (AppFunc -> RemotingMiddleware)
     /// Runs the WebSharper Remoting service, allowing WebSharper-compiled
     /// client-side code to invoke [<Rpc>]-annotated server-side functions.
     /// WebSharper metadata is loaded from binDirectory.
-    /// If binDirectory is not specified, webRoot/bin is used.
+    /// If binDirectory is not specified, the folder containing WebSharper.Owin.dll is used.
     static member AsMidFunc : webRoot: string * ?binDirectory: string -> MidFunc
 
 type SiteletMiddleware<'T when 'T : equality> =
@@ -88,17 +111,15 @@ type SiteletMiddleware<'T when 'T : equality> =
     /// Inspects the binDirectory folder, looking for an assembly that contains
     /// a WebSharper Sitelet, and runs this Sitelet with webRoot as the root folder.
     /// Also runs the Remoting service using metadata discovered from binDirectory.
-    /// If binDirectory is not specified, webRoot/bin is used.
+    /// If binDirectory is not specified, the folder containing WebSharper.Owin.dll is used.
     static member UseDiscoveredSitelet : webRoot: string * ?binDirectory: string -> (AppFunc -> SiteletMiddleware<obj>)
     /// Inspects the binDirectory folder, looking for an assembly that contains
     /// a WebSharper Sitelet, and runs this Sitelet with webRoot as the root folder.
     /// Also runs the Remoting service using metadata discovered from binDirectory.
-    /// If binDirectory is not specified, webRoot/bin is used.
+    /// If binDirectory is not specified, the folder containing WebSharper.Owin.dll is used.
     static member AsMidFunc : webRoot: string * ?binDirectory: string -> MidFunc
 
-type InitAction = Owin.IAppBuilder * WebSharper.Core.Json.Provider * (IOwinContext -> Web.IContext) -> unit
-
-/// Options to initialize WebSharper with IAppBuilder.UseWebSharper.
+/// Options to initialize WebSharper.
 type WebSharperOptions<'T when 'T: equality> =
     new : unit -> WebSharperOptions<'T>  
 
@@ -107,7 +128,7 @@ type WebSharperOptions<'T when 'T: equality> =
     member ServerRootDirectory : string with get, set
 
     /// Get or set the web application's binary directory.
-    /// Default: the "bin" subdirectory of ServerRootDirectory.
+    /// Default: the folder containing WebSharper.Owin.dll.
     member BinDirectory : string with get, set
 
     /// Whether to serve WebSharper RPC functions.
@@ -131,8 +152,7 @@ type WebSharperOptions<'T when 'T: equality> =
     /// Default: None.
     member Sitelet : option<Sitelet<'T>> with get, set
 
-    /// Whether to search assemblies for a sitelet to serve if Sitelet is set to None.
-    /// Default: false.
+    /// If true and this.Sitelet is None, search the binaries folder for a sitelet assembly.
     member DiscoverSitelet : bool with get, set
 
     /// What to do when the WebSharper sitelet or remote function throws an exception.
@@ -149,8 +169,8 @@ type WebSharperOptions<'T when 'T: equality> =
     /// Set the sitelet to serve.
     member WithSitelet : Sitelet<'T> -> WebSharperOptions<'T>
 
-    /// Add an action to run on startup.
-    member WithInitAction : InitAction -> WebSharperOptions<'T>
+    /// Run WebSharper as an Owin middleware function.
+    member AsMidFunc : unit -> MidFunc
 
 [<AutoOpen>]
 module Extensions =
@@ -161,13 +181,13 @@ module Extensions =
         /// Inspects the binDirectory folder, looking for an assembly that contains
         /// a WebSharper Sitelet, and runs this Sitelet with webRoot as the root folder.
         /// Also runs the Remoting service using metadata discovered from binDirectory.
-        /// If binDirectory is not specified, webRoot/bin is used.
+        /// If binDirectory is not specified, the folder containing WebSharper.Owin.dll is used.
         member UseDiscoveredSitelet : webRoot: string * ?binDirectory: string -> IAppBuilder
 
         /// Runs the provided Sitelet with webRoot as the root folder, using
         /// WebSharper metadata loaded from assemblies located in binDirectory.
         /// Also runs the Remoting service using metadata discovered from binDirectory.
-        /// If binDirectory is not specified, webRoot/bin is used.
+        /// If binDirectory is not specified, the folder containing WebSharper.Owin.dll is used.
         member UseSitelet : webRoot: string * Sitelet<'T> * ?binDirectory: string -> IAppBuilder
 
         /// Runs the provided Sitelet with the provided options.
@@ -180,7 +200,7 @@ module Extensions =
         /// methods UseDiscoveredSitelet and UseSitelet, as well as
         /// UseCustomSitelet if options.RunRemoting is set to true.
         /// WebSharper metadata is loaded from binDirectory.
-        /// If binDirectory is not specified, webRoot/bin is used.
+        /// If binDirectory is not specified, the folder containing WebSharper.Owin.dll is used.
         member UseWebSharperRemoting : webRoot: string * ?binDirectory: string -> IAppBuilder
 
         /// Runs the WebSharper Remoting service, allowing WebSharper-compiled

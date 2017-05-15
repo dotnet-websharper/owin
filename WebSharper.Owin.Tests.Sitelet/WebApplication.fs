@@ -144,11 +144,11 @@ module Server =
             )
         }
 
-    let ArticlePage articleId ctx =
+    let ArticlePage articleId title ctx =
         Content.Page(
             Body =
                 [
-                    H1 [Text ("Article " + string articleId)]
+                    H1 [Text (sprintf "Article %i: %s" articleId title)]
                     P [Text "Hello world! Now I just need to add some content..."]
                     P [A [HRef (ctx.Link Index)] -< [Text "Back to home"]]
                 ]
@@ -185,7 +185,7 @@ module Server =
             Sitelet.Content "/" Index IndexPage
             Sitelet.Infer <| fun ctx -> function
                 | Index -> IndexPage ctx
-                | Article n -> ArticlePage n ctx
+                | Article n -> ArticlePage n "(unknown)" ctx
                 | Upload -> UploadPage ctx
-                | Post (x, y) -> ArticlePage x ctx
+                | Post (x, y) -> ArticlePage x y ctx
         ]

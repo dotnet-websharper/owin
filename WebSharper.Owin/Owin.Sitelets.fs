@@ -8,7 +8,6 @@ open System.Security.Principal
 open System.Threading.Tasks
 open System.Web
 open System.Web.Security
-open global.Owin
 open Microsoft.Owin
 open WebSharper
 open WebSharper.Sitelets
@@ -67,7 +66,7 @@ type Options =
             resp.WriteAsync "Internal Server Error"
 
     static member Create() =
-        let dir = System.IO.Directory.GetCurrentDirectory()
+        let dir = Directory.GetCurrentDirectory()
         {
             Debug = false
             JsonProvider = Core.Json.Provider.Create()
@@ -93,11 +92,6 @@ module private Internal =
             Fields : Http.ParameterCollection
             Body : Stream
         }
-
-    module Seq =
-        let tryHead (seq: seq<'t>) =
-            let e = seq.GetEnumerator()
-            if e.MoveNext() then Some e.Current else None
 
     type OwinCookieUserSession(ctx: IOwinContext) =
 
@@ -136,10 +130,7 @@ module private Internal =
                 async {
                     let persistent = defaultArg persistent false
                     let cookie = FormsAuthentication.GetAuthCookie(user, persistent)
-                    let expires =
-                        if persistent then
-                            System.Nullable(cookie.Expires)
-                        else System.Nullable()
+                    let expires = if persistent then Nullable(cookie.Expires) else Nullable()
                     ctx.Response.Cookies.Append(cookie.Name, cookie.Value,
                         CookieOptions(
                             Domain = cookie.Domain,
@@ -153,7 +144,7 @@ module private Internal =
             member this.Logout() =
                 async {
                     ctx.Response.Cookies.Append(FormsAuthentication.FormsCookieName, "",
-                        CookieOptions(Expires = System.Nullable(DateTime.Now.AddDays(-1.))))
+                        CookieOptions(Expires = Nullable(DateTime.Now.AddDays(-1.))))
                     return refresh null
                 }
 
@@ -198,7 +189,7 @@ module private Internal =
             req.ContentType.ToLowerInvariant().StartsWith "multipart/form-data"
 
         let DefaultCharset = System.Text.Encoding.GetEncoding("ISO-8859-1")
-        let re = System.Text.RegularExpressions.Regex("; *charset *= *([^;]+)")
+        let re = RegularExpressions.Regex("; *charset *= *([^;]+)")
         let GetCharset (req: IOwinRequest) =
             match req.ContentType with
             | null -> DefaultCharset
@@ -467,7 +458,6 @@ type RemotingMiddleware(next: AppFunc, webRoot: string, server: Rem.Server, onEx
 
     member this.Invoke(env: Env) =
         let context = OwinContext(env) :> IOwinContext
-        let httpContext = HttpContext.Current
         if alwaysSetContext then O2W.SimpleContext webRoot context.Request |> ignore
         let headers =
             O2W.Headers context.Request.Headers
@@ -480,18 +470,18 @@ type RemotingMiddleware(next: AppFunc, webRoot: string, server: Rem.Server, onEx
         if Rem.IsRemotingRequest getReqHeader then
             async {
                 try
-                    match WebSharper.Web.RpcHandler.CorsAndCsrfCheck context.Request.Method context.Request.Uri
+                    match RpcHandler.CorsAndCsrfCheck context.Request.Method context.Request.Uri
                             (fun k -> match context.Request.Cookies.[k] with null -> None | x -> Some x)
                             getReqHeader
                             (fun k v -> context.Response.Cookies.Append(k, v,
                                             CookieOptions(Expires = Nullable(System.DateTime.UtcNow.AddYears(1000)))))
                             with
-                    | WebSharper.Web.Error (code, _, body) ->
+                    | Error (code, _, body) ->
                         context.Response.StatusCode <- code
                         context.Response.Write(body)
-                    | WebSharper.Web.Preflight headers ->
+                    | Preflight headers ->
                         addRespHeaders headers
-                    | WebSharper.Web.Ok headers ->
+                    | Ok headers ->
                         addRespHeaders headers
                         let ctx = O2W.SimpleContext webRoot context.Request
                         use reader = new StreamReader(context.Request.Body)
@@ -579,14 +569,14 @@ type SiteletMiddleware<'T when 'T : equality>(next: AppFunc, config: Options, si
             match binDirectory with
             | None -> Options.DefaultBinDirectory
             | Some d -> d
-        let options = Options.Create(binDir)
+        let options = Options.Create(webRoot, binDir)
         let ok =
             try
                 DiscoverAssemblies binDir
                 |> HttpModule.DiscoverSitelet
                 |> Option.map (fun sitelet ->
                     fun next -> SiteletMiddleware<obj>(next, options, sitelet))
-            with :? System.Reflection.ReflectionTypeLoadException as exn ->
+            with :? Reflection.ReflectionTypeLoadException as exn ->
                 failwithf "%A" exn.LoaderExceptions
         match ok with
         | Some this -> this
@@ -598,7 +588,7 @@ type SiteletMiddleware<'T when 'T : equality>(next: AppFunc, config: Options, si
 
 type WebSharperOptions<'T when 'T : equality>() = 
     let mutable binDir = None
-    member val ServerRootDirectory = System.IO.Directory.GetCurrentDirectory() with get, set
+    member val ServerRootDirectory = Directory.GetCurrentDirectory() with get, set
     member this.BinDirectory
         with get () = 
             match binDir with
@@ -627,7 +617,7 @@ type WebSharperOptions<'T when 'T : equality>() =
 
         let sitelet =
             match this.Sitelet with
-            | Some s -> Some (WebSharper.Sitelets.Sitelet.Upcast s)
+            | Some s -> Some (Sitelet.Upcast s)
             | None when this.DiscoverSitelet -> HttpModule.DiscoverSitelet(assemblies)
             | None -> None
 
@@ -664,7 +654,7 @@ type WebSharperOptions<'T when 'T : equality>() =
 
 [<AutoOpen>]
 module Extensions =
-    type IAppBuilder with
+    type Owin.IAppBuilder with
 
         member this.UseWebSharperRemoting(webRoot: string, meta: M.Info) =
             this.Use(RemotingMiddleware.AsMidFunc(Options.Create(meta).WithServerRootDirectory(webRoot)))

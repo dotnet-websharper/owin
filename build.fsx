@@ -47,6 +47,7 @@ let testHost =
                 r.Project(main)
                 r.Project(testSitelet)
                 r.NuGet("Zafir").Latest(true).Reference()
+                r.NuGet("Zafir.Html").Latest(true).ForceFoundVersion().Reference()
                 r.NuGet("Microsoft.Owin").Reference()
                 r.NuGet("Microsoft.Owin.Diagnostics").Reference()
                 r.NuGet("Microsoft.Owin.FileSystems").Reference()

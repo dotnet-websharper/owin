@@ -418,21 +418,10 @@ module private Internal =
             try Some (Assembly.LoadFileInfo(p))
             with e -> None)
 
-    type M.Info with
-
-        static member LoadFromAssemblies(assemblies: Reflection.Assembly[]) =
-            let refs =
-                assemblies
-                |> Seq.choose (fun f -> try M.IO.LoadReflected(f) with _ -> None)
-                |> List.ofSeq
-            M.Info.UnionWithoutDependencies refs, DepG.FromData(refs |> Seq.map (fun m -> m.Dependencies))
-
-        static member LoadFromBinDirectory(binDirectory: string) =
-            DiscoverAssemblies binDirectory
-            |> M.Info.LoadFromAssemblies
-
-        static member LoadFromWebRoot(webRoot: string) =
-            M.Info.LoadFromBinDirectory(Path.Combine(webRoot, "bin"))
+    // Ensule that assemblies from binDirectory are loaded.
+    // Call this before any use of WebSharper.Web.Shared.*
+    let PreloadAssemblies binDirectory =
+        DiscoverAssemblies binDirectory |> ignore
 
 type Options with
 
@@ -457,14 +446,9 @@ type Options with
         { o with RemotingServer = server }
 
     static member Create(webRoot, ?binDirectory) =
-        let binDirectory = defaultArg binDirectory (Path.Combine(webRoot, "bin"))
-        let meta, graph = M.Info.LoadFromBinDirectory(binDirectory)
-        Options.Create(meta, graph)
+        PreloadAssemblies (defaultArg binDirectory Options.DefaultBinDirectory)
+        Options.Create(Shared.Metadata, Shared.Dependencies)
             .WithServerRootDirectory(webRoot)
-
-    member o.WithBinDirectory(dir) =
-        let meta, graph = M.Info.LoadFromBinDirectory dir
-        { o with Metadata = meta; Dependencies = graph }
 
 type RemotingMiddleware(next: AppFunc, webRoot: string, server: Rem.Server, onException: IOwinResponse -> exn -> Task, alwaysSetContext: bool) =
 
@@ -538,11 +522,8 @@ type RemotingMiddleware(next: AppFunc, webRoot: string, server: Rem.Server, onEx
     // (webRoot, ?binDirectory)
 
     static member UseRemoting(webRoot: string, ?binDirectory: string) =
-        let meta, graph =
-            match binDirectory with
-            | None -> M.Info.LoadFromWebRoot(webRoot)
-            | Some binDirectory -> M.Info.LoadFromBinDirectory(binDirectory)
-        let o = Options.Create(meta, graph).WithServerRootDirectory(webRoot)
+        PreloadAssemblies (defaultArg binDirectory Options.DefaultBinDirectory)
+        let o = Options.Create(Shared.Metadata, Shared.Dependencies).WithServerRootDirectory(webRoot)
         fun next -> new RemotingMiddleware(next, o)
 
     static member AsMidFunc(webRoot: string, ?binDirectory: string) =
@@ -577,10 +558,7 @@ type SiteletMiddleware<'T when 'T : equality>(next: AppFunc, config: Options, si
         | None -> failwith "Failed to discover sitelet assemblies"
 
     static member UseDiscoveredSitelet(webRoot: string, ?binDirectory: string) =
-        let binDir =
-            match binDirectory with
-            | None -> Options.DefaultBinDirectory
-            | Some d -> d
+        let binDir = defaultArg binDirectory Options.DefaultBinDirectory
         let options = Options.Create(webRoot, binDir)
         let ok =
             try
@@ -613,8 +591,6 @@ type WebSharperOptions<'T when 'T : equality>() =
     member val Sitelet = None with get, set
     member val DiscoverSitelet = false with get, set
     member val MetadataAndGraph = None with get, set
-    member this.DiscoverSiteletIn =
-        if this.DiscoverSitelet then Some this.BinDirectory else None
     member val OnException = Options.DefaultOnException with get, set
 
     static member DefaultOnException debug response exn =
@@ -633,25 +609,20 @@ type WebSharperOptions<'T when 'T : equality>() =
             | None when this.DiscoverSitelet -> HttpModule.DiscoverSitelet(assemblies)
             | None -> None
 
-        let meta, graph = 
+        let meta, graph, json =
             match this.MetadataAndGraph with
-            | Some m -> m
-            | None ->
-                if this.UseRemoting || Option.isSome this.Sitelet || this.DiscoverSitelet then
-                    M.Info.LoadFromAssemblies(assemblies)
-                else
-                    M.Info.Empty, DepG.Empty
+            | Some (m, g) -> m, g, Core.Json.Provider.CreateTyped m
+            | None -> Shared.Metadata, Shared.Dependencies, Shared.Json
 
-        let remotingServer, jsonProvider =
+        let remotingServer =
             if this.UseRemoting then
-                let json = Core.Json.Provider.CreateTyped meta
                 let rem = Rem.Server.Create meta json
-                Some rem, rem.JsonProvider
-            else None, Core.Json.Provider.Create()
+                Some rem
+            else None
 
         sitelet, {
             Debug = this.Debug
-            JsonProvider = jsonProvider
+            JsonProvider = json
             Metadata = meta
             Dependencies = graph
             ServerRootDirectory = this.ServerRootDirectory

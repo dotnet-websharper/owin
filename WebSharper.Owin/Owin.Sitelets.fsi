@@ -123,7 +123,7 @@ type SiteletMiddleware<'T when 'T : equality> =
 
 /// Options to initialize WebSharper.
 type WebSharperOptions<'T when 'T: equality> =
-    new : unit -> WebSharperOptions<'T>  
+    new : unit -> WebSharperOptions<'T>
 
     /// Get or set the web application's root directory.
     /// Default: the current working directory.

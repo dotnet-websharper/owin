@@ -29,7 +29,7 @@ let main =
             ])
 
 let testSitelet =
-    bt.Zafir.SiteletWebsite("WebSharper.Owin.Tests.Sitelet")
+    bt.Zafir.Library("WebSharper.Owin.Tests.Sitelet")
         .SourcesFromProject()
         .References(fun r ->
             [
@@ -39,7 +39,7 @@ let testSitelet =
             ])
 
 let testHost =
-    bt.FSharp.ConsoleExecutable("WebSharper.Owin.Tests.SelfHost")
+    bt.Zafir.Executable("WebSharper.Owin.Tests.SelfHost")
         .SourcesFromProject()
         .References(fun r ->
             [

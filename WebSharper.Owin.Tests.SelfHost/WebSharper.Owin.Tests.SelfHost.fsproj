@@ -6,6 +6,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>{bfd48142-7821-44ca-91df-9a26fbb8d5df}</ProjectGuid>
     <WebProjectOutputDir>$(MSBuildThisFileDirectory)</WebProjectOutputDir>
+    <WebSharperProject>Site</WebSharperProject>
     <NuGetPackageImportStamp>b409b9b3</NuGetPackageImportStamp>
     <TargetFrameworkProfile />
     <StartArguments>..</StartArguments>

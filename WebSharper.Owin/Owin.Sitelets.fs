@@ -260,15 +260,16 @@ module private Internal =
                 Files = formData.Files
             }
 
-        let SetHttpContext (env: Env) : unit =
-            match HttpContext.Current with
+        let SetHttpContext (env: Env) (httpContext: HttpContext) : unit =
+            match httpContext with
             | null -> ()
             | x -> env.[EnvKey.HttpContext] <- HttpContextWrapper(x)
 
-        let SimpleContext rootDir (req: IOwinRequest) : Web.IContext =
+        /// httpContext is passed externally because we might not be on the right thread to retrieve it.
+        let SimpleContext rootDir (req: IOwinRequest) (httpContext: HttpContext) : Web.IContext =
             let env = req.Environment
             EnvKey.GetOrSet<Web.IContext> env EnvKey.WebSharper.Context <| fun env ->
-                SetHttpContext env
+                SetHttpContext env httpContext
                 let owinCtx = req.Context
                 let uri = req.Uri
 //                let wsReq = Request req
@@ -368,7 +369,7 @@ module private Internal =
                             | s -> s
                         p ++ loc
             EnvKey.GetOrSet<Context<'T>> context.Environment EnvKey.WebSharper.Context <| fun env ->
-                O2W.SetHttpContext env
+                O2W.SetHttpContext env HttpContext.Current // We are sure to be on the right thread here
                 new Context<'T>(
                     ApplicationPath = appPath,
                     Environment = env,
@@ -464,6 +465,7 @@ type RemotingMiddleware(next: AppFunc, webRoot: string, server: Rem.Server, onEx
         let addRespHeaders headers =
             headers |> List.iter (fun (k, v) -> context.Response.Headers.Add(k, [|v|]))
         if Rem.IsRemotingRequest getReqHeader then
+            let httpContext = HttpContext.Current
             async {
                 try
                     match RpcHandler.CorsAndCsrfCheck context.Request.Method context.Request.Uri
@@ -479,7 +481,7 @@ type RemotingMiddleware(next: AppFunc, webRoot: string, server: Rem.Server, onEx
                         addRespHeaders headers
                     | Ok headers ->
                         addRespHeaders headers
-                        let ctx = O2W.SimpleContext webRoot context.Request
+                        let ctx = O2W.SimpleContext webRoot context.Request httpContext
                         use reader = new StreamReader(context.Request.Body)
                         let! body = reader.ReadToEndAsync() |> Async.AwaitTask
                         let! resp =

@@ -55,7 +55,6 @@ let testHost =
                 r.NuGet("Microsoft.Owin.Hosting").Reference()
                 r.NuGet("Microsoft.Owin.SelfHost").Reference()
                 r.NuGet("Microsoft.Owin.StaticFiles").Reference()
-                r.NuGet("Mono.Cecil").Reference()
             ])
 
 bt.Solution [

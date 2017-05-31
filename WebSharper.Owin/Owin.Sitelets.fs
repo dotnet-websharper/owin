@@ -63,10 +63,9 @@ type Options =
 
     static member DefaultOnException (debug: bool) (resp: IOwinResponse) (e: exn) =
         resp.StatusCode <- 500
-        if debug then
-            resp.WriteAsync (e.ToString())
-        else
-            resp.WriteAsync "Internal Server Error"
+        let trace = e.ToString()
+        Console.Error.WriteLine trace
+        resp.WriteAsync (if debug then trace else "Internal Server Error")
 
     static member Create() =
         let dir = Directory.GetCurrentDirectory()

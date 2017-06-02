@@ -265,19 +265,24 @@ module private Internal =
             | x -> env.[EnvKey.HttpContext] <- HttpContextWrapper(x)
 
         /// httpContext is passed externally because we might not be on the right thread to retrieve it.
-        let SimpleContext rootDir (req: IOwinRequest) (httpContext: HttpContext) : Web.IContext =
+        let SimpleContext rootDir (req: IOwinRequest) (httpContext: HttpContext) (options: Options) : Web.Context =
             let env = req.Environment
-            EnvKey.GetOrSet<Web.IContext> env EnvKey.WebSharper.Context <| fun env ->
+            EnvKey.GetOrSet<Web.Context> env EnvKey.WebSharper.Context <| fun env ->
                 SetHttpContext env httpContext
                 let owinCtx = req.Context
                 let uri = req.Uri
 //                let wsReq = Request req
                 let session = lazy new OwinCookieUserSession(owinCtx)
-                { new IContext with
+                { new Web.Context() with
                     member ctx.Environment = env
                     member ctx.RequestUri = uri
                     member ctx.RootFolder = rootDir
                     member ctx.UserSession = session.Value :> _
+                    member ctx.Metadata = options.Metadata
+                    member ctx.Json = options.JsonProvider
+                    member ctx.Dependencies = options.Dependencies
+                    member ctx.ApplicationPath = options.UrlPrefix
+                    member ctx.ResourceContext = WebSharper.Web.ResourceContext.ResourceContext options.UrlPrefix
                 }
 
     module W2O =
@@ -376,7 +381,6 @@ module private Internal =
                     Json = json,
                     Metadata = info,
                     Dependencies = graph,
-                    ResolveUrl = resolveUrl appPath,
                     ResourceContext = resContext context,
                     Request = req,
                     RootFolder = cfg.ServerRootDirectory,
@@ -450,11 +454,17 @@ type Options with
         Options.Create(Shared.Metadata, Shared.Dependencies)
             .WithServerRootDirectory(webRoot)
 
-type RemotingMiddleware(next: AppFunc, webRoot: string, server: Rem.Server, onException: IOwinResponse -> exn -> Task, alwaysSetContext: bool) =
+type RemotingMiddleware(next: AppFunc, options: Options, alwaysSetContext: bool) = //, webRoot: string, server: Rem.Server, onException: IOwinResponse -> exn -> Task, alwaysSetContext: bool) =
+    let webRoot = options.ServerRootDirectory
+    let onException = options.OnException options.Debug
 
     member this.Invoke(env: Env) =
         let context = OwinContext(env) :> IOwinContext
-        if alwaysSetContext then O2W.SimpleContext webRoot context.Request |> ignore
+        let httpContext = HttpContext.Current
+        if alwaysSetContext then O2W.SimpleContext webRoot context.Request httpContext options |> ignore
+        match options.RemotingServer with
+        | None -> next.Invoke(env)
+        | Some server ->
         let headers =
             O2W.Headers context.Request.Headers
             |> Seq.map (fun h -> (h.Name.ToLowerInvariant(), h.Value))
@@ -464,7 +474,6 @@ type RemotingMiddleware(next: AppFunc, webRoot: string, server: Rem.Server, onEx
         let addRespHeaders headers =
             headers |> List.iter (fun (k, v) -> context.Response.Headers.Add(k, [|v|]))
         if Rem.IsRemotingRequest getReqHeader then
-            let httpContext = HttpContext.Current
             async {
                 try
                     match RpcHandler.CorsAndCsrfCheck context.Request.Method context.Request.Uri
@@ -480,7 +489,7 @@ type RemotingMiddleware(next: AppFunc, webRoot: string, server: Rem.Server, onEx
                         addRespHeaders headers
                     | Ok headers ->
                         addRespHeaders headers
-                        let ctx = O2W.SimpleContext webRoot context.Request httpContext
+                        let ctx = O2W.SimpleContext webRoot context.Request httpContext options
                         use reader = new StreamReader(context.Request.Body)
                         let! body = reader.ReadToEndAsync() |> Async.AwaitTask
                         let! resp =
@@ -500,24 +509,13 @@ type RemotingMiddleware(next: AppFunc, webRoot: string, server: Rem.Server, onEx
             :> Task
         else next.Invoke(env)
 
-    new (next, webRoot, server, onException) =
-        new RemotingMiddleware(next, webRoot, server, onException, true)
-
-    // (options)
-
     new (next, options: Options) =
         new RemotingMiddleware(next, options, true)
-
-    new (next, options: Options, alwaysSetContext) =
-        new RemotingMiddleware(next, options.ServerRootDirectory, options.RemotingServer.Value,
-            options.OnException options.Debug, alwaysSetContext)
 
     static member AsMidFunc(options: Options) =
         match options.RemotingServer with
         | Some rem ->
-            MidFunc(fun next ->
-                AppFunc(RemotingMiddleware(next, options.ServerRootDirectory, rem,
-                            options.OnException options.Debug).Invoke))
+            MidFunc(fun next -> AppFunc(RemotingMiddleware(next, options).Invoke))
         | None -> MidFunc(fun next -> AppFunc(fun env -> next.Invoke(env)))
 
     // (webRoot, ?binDirectory)

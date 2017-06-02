@@ -29,6 +29,7 @@ module SelfHostedServer =
                                 ServerRootDirectory = workingDirectory,
                                 DiscoverSitelet = true,
                                 OnException = (fun debug resp exn ->
+                                    resp.StatusCode <- 500
                                     resp.WriteAsync("[UNCAUGHT EXCEPTION]\r\n" + string exn)
                                 )
                             )

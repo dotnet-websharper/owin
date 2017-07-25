@@ -2,6 +2,7 @@ namespace WebSharper.Owin
 
 open System
 open System.Collections.Generic
+open System.Collections.Concurrent
 open System.IO
 open System.Configuration
 open System.Security.Principal
@@ -53,6 +54,7 @@ type Options =
         UrlPrefix : string
         RemotingServer : option<Rem.Server>
         OnException : bool -> IOwinResponse -> exn -> Task
+        ResourceContextCache : ConcurrentDictionary<string, Res.Context>
     }
 
     member o.WithDebug() = o.WithDebug(true)
@@ -78,6 +80,7 @@ type Options =
             UrlPrefix = ""
             RemotingServer = None
             OnException = Options.DefaultOnException
+            ResourceContextCache = ConcurrentDictionary()
         }
 
     static member DefaultBinDirectory =
@@ -306,31 +309,43 @@ module private Internal =
             )
 
     let buildResourceContext cfg (context: IOwinContext) : Res.Context =
-        let isDebug = cfg.Debug
-        let pu = P.PathUtility.VirtualPaths(context.Request.PathBase.Value)
-        {
-            DebuggingEnabled = isDebug
-            DefaultToHttp = false
-            GetSetting = fun (name: string) ->
-                match ConfigurationManager.AppSettings.[name] with
-                | null -> None
-                | x -> Some x
-            GetAssemblyRendering = fun name ->
-                let aid = P.AssemblyId.Create(name)
-                let url = if isDebug then pu.JavaScriptPath(aid) else pu.MinifiedJavaScriptPath(aid)
-                Res.RenderLink url
-            GetWebResourceRendering = fun ty resource ->
-                let id = P.AssemblyId.Create(ty)
-                let kind =
-                    if resource.EndsWith(".js") || resource.EndsWith(".ts")
-                        then P.ResourceKind.Script
-                        else P.ResourceKind.Content
-                P.EmbeddedResource.Create(kind, id, resource)
-                |> pu.EmbeddedPath
-                |> Res.RenderLink
-            RenderingCache = System.Collections.Concurrent.ConcurrentDictionary()
-            ResourceDependencyCache = System.Collections.Concurrent.ConcurrentDictionary()
-        }
+        let appPath = context.Request.PathBase.Value
+        cfg.ResourceContextCache.GetOrAdd(appPath, fun appPath ->
+            let isDebug = cfg.Debug
+            let pu = P.PathUtility.VirtualPaths(appPath)
+            {
+                DebuggingEnabled = isDebug
+                DefaultToHttp = false
+                GetSetting = fun (name: string) ->
+                    match ConfigurationManager.AppSettings.[name] with
+                    | null -> None
+                    | x -> Some x
+                GetAssemblyRendering = fun name ->
+                    let aid = P.AssemblyId.Create(name)
+                    let url = if isDebug then pu.JavaScriptPath(aid) else pu.MinifiedJavaScriptPath(aid)
+                    let version = 
+                        let fileName = if isDebug then pu.JavaScriptFileName(aid) else pu.MinifiedJavaScriptFileName(aid)
+                        match Shared.Metadata.ResourceHashes.TryGetValue(fileName) with
+                        | true, h -> "?h=" + string h
+                        | _ -> ""
+                    Res.RenderLink (url + version)
+                GetWebResourceRendering = fun ty resource ->
+                    let id = P.AssemblyId.Create(ty)
+                    let kind =
+                        if resource.EndsWith(".js") || resource.EndsWith(".ts")
+                            then P.ResourceKind.Script
+                            else P.ResourceKind.Content
+                    let r = P.EmbeddedResource.Create(kind, id, resource)
+                    let url = pu.EmbeddedPath r
+                    let version = 
+                        match Shared.Metadata.ResourceHashes.TryGetValue(pu.EmbeddedResourceKey r) with
+                        | true, h -> "?h=" + string h
+                        | _ -> ""
+                    Res.RenderLink (url + version)
+                RenderingCache = System.Collections.Concurrent.ConcurrentDictionary()
+                ResourceDependencyCache = System.Collections.Concurrent.ConcurrentDictionary()
+            } : Res.Context
+        )
 
     [<Sealed>]
     type ContextBuilder(cfg) =
@@ -442,6 +457,7 @@ type Options with
             UrlPrefix = ""
             RemotingServer = Some remotingServer
             OnException = Options.DefaultOnException
+            ResourceContextCache = ConcurrentDictionary()
         }
 
     member o.WithRunRemoting(b) =
@@ -628,6 +644,7 @@ type WebSharperOptions<'T when 'T : equality>() =
             UrlPrefix = this.UrlPrefix
             RemotingServer = remotingServer
             OnException = this.OnException
+            ResourceContextCache = ConcurrentDictionary()
         }
 
     member this.AsMidFunc() =

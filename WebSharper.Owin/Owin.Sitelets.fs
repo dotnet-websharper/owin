@@ -118,6 +118,20 @@ module private Internal =
                 try refresh ctx.Request.Cookies.[FormsAuthentication.FormsCookieName]
                 with _ -> refresh null
 
+        let mkCookie (user: string) (duration: option<TimeSpan>) =
+            let cookie = FormsAuthentication.GetAuthCookie(user, duration.IsSome)
+            ctx.Response.Cookies.Append(cookie.Name, cookie.Value,
+                CookieOptions(
+                    Domain = cookie.Domain,
+                    Expires =
+                        (match duration with
+                        | Some d -> Nullable(DateTime.UtcNow.Add(d))
+                        | None -> Nullable()),
+                    HttpOnly = cookie.HttpOnly,
+                    Path = cookie.Path,
+                    Secure = cookie.Secure))
+            refresh cookie.Value
+
         interface IUserSession with
 
             member this.IsAvailable = true
@@ -135,17 +149,16 @@ module private Internal =
 
             member this.LoginUser(user, ?persistent) =
                 async {
-                    let persistent = defaultArg persistent false
-                    let cookie = FormsAuthentication.GetAuthCookie(user, persistent)
-                    let expires = if persistent then Nullable(cookie.Expires) else Nullable()
-                    ctx.Response.Cookies.Append(cookie.Name, cookie.Value,
-                        CookieOptions(
-                            Domain = cookie.Domain,
-                            Expires = expires,
-                            HttpOnly = cookie.HttpOnly,
-                            Path = cookie.Path,
-                            Secure = cookie.Secure))
-                    return refresh cookie.Value
+                    let durationOpt =
+                        match persistent with
+                        | Some true -> Some (TimeSpan.FromDays(1000.*365.))
+                        | _ -> None
+                    mkCookie user durationOpt
+                }
+
+            member this.LoginUser(user: string, duration: TimeSpan) =
+                async {
+                    mkCookie user (Some duration)
                 }
 
             member this.Logout() =

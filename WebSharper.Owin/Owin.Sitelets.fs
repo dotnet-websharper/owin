@@ -634,7 +634,7 @@ type WebSharperOptions<'T when 'T : equality>() =
 
         let sitelet =
             match this.Sitelet with
-            | Some s -> Some (Sitelet.Upcast s)
+            | Some s -> Some (Sitelet.Box s)
             | None when this.DiscoverSitelet -> HttpModule.DiscoverSitelet(assemblies)
             | None -> None
 

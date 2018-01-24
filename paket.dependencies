@@ -8,7 +8,7 @@ storage: none
 nuget WebSharper alpha
 nuget WebSharper.FSharp alpha
 nuget Owin alpha
-nuget Microsoft.Owin alpha
+nuget Microsoft.Owin
 nuget WebSharper.Html alpha
 nuget Microsoft.Owin.Diagnostics 
 nuget Microsoft.Owin.FileSystems 

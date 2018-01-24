@@ -1,10 +1,11 @@
 #!/bin/bash
-export EnableNuGetPackageRestore=true
-: ${MonoHome=/usr/lib/mono}
-: ${FSharpHome=$MonoHome/4.0}
-: ${NuGetHome=tools/NuGet}
-export FSharpHome
-export MonoHome
-export NuGetHome
-mono $NuGetHome/NuGet.exe install IntelliFactory.Build -pre -ExcludeVersion -o tools/packages
-mono $FSharpHome/fsi.exe --exec build.fsx %*
+
+set -e
+
+if [ "$OS" = "Windows_NT" ]; then
+    .paket/paket.exe restore -g build
+else
+    mono .paket/paket.exe restore -g build
+fi
+
+paket-files/build/intellifactory/websharper/tools/WebSharper.Fake.sh "$@"

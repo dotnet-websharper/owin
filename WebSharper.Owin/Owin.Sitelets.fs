@@ -95,7 +95,7 @@ module private Internal =
     [<NoComparison; NoEquality>]
     type FormData =
         {
-            Files : seq<HttpPostedFileBase>
+            Files : seq<Http.IPostedFile>
             Fields : Http.ParameterCollection
             Body : Stream
         }
@@ -231,7 +231,8 @@ module private Internal =
                     [|
                         for f in parser.Files ->
                             let length = int f.Data.Length
-                            { new HttpPostedFileBase() with
+                            { new Http.IPostedFile with
+                                member this.Key = f.Name
                                 member this.ContentLength = length
                                 member this.ContentType = f.ContentType
                                 member this.FileName = f.FileName
@@ -269,7 +270,6 @@ module private Internal =
                 Headers = Headers req.Headers
                 Post = formData.Fields
                 Get = Query req.Query
-                Cookies = Cookies req.Cookies
                 ServerVariables = Http.ParameterCollection([])
                 Body = formData.Body
                 Files = formData.Files
@@ -507,7 +507,7 @@ type RemotingMiddleware(next: AppFunc, options: Options, alwaysSetContext: bool)
             async {
                 try
                     match RpcHandler.CorsAndCsrfCheck context.Request.Method context.Request.Uri
-                            (fun k -> match context.Request.Cookies.[k] with null -> None | x -> Some x)
+                            (fun k -> Option.ofObj context.Request.Cookies.[k])
                             getReqHeader
                             (fun k v -> context.Response.Cookies.Append(k, v,
                                             CookieOptions(Expires = Nullable(System.DateTime.UtcNow.AddYears(1000)))))
@@ -582,7 +582,7 @@ type SiteletMiddleware<'T when 'T : equality>(next: AppFunc, config: Options, si
             AppFunc(m.Invoke))
 
     static member DiscoverSitelet(assemblies) =
-        match HttpModule.DiscoverSitelet assemblies with
+        match Loading.DiscoverSitelet assemblies with
         | Some this -> this
         | None -> failwith "Failed to discover sitelet assemblies"
 
@@ -592,7 +592,7 @@ type SiteletMiddleware<'T when 'T : equality>(next: AppFunc, config: Options, si
         let ok =
             try
                 DiscoverAssemblies binDir
-                |> HttpModule.DiscoverSitelet
+                |> Loading.DiscoverSitelet
                 |> Option.map (fun sitelet ->
                     fun next -> SiteletMiddleware<obj>(next, options, sitelet))
             with :? Reflection.ReflectionTypeLoadException as exn ->
@@ -635,7 +635,7 @@ type WebSharperOptions<'T when 'T : equality>() =
         let sitelet =
             match this.Sitelet with
             | Some s -> Some (Sitelet.Box s)
-            | None when this.DiscoverSitelet -> HttpModule.DiscoverSitelet(assemblies)
+            | None when this.DiscoverSitelet -> Loading.DiscoverSitelet(assemblies)
             | None -> None
 
         let meta, graph, json =

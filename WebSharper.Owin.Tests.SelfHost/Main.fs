@@ -39,7 +39,7 @@ module SelfHostedServer =
                 stdin.ReadLine() |> ignore
                 0
             with e ->
-                eprintfn "Error starting website:\n%s" e.Message
+                eprintfn "Error starting website:\n%A" e
                 1
         else
             eprintfn "Usage: OwinSample WORKING_DIRECTORY"

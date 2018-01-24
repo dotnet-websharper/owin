@@ -1,0 +1,22 @@
+type file
+id WebSharper.Owin
+authors
+    IntelliFactory
+owners
+    IntelliFactory
+licenseUrl http://websharper.com/licensing
+projectUrl https://github.com/intellifactory/websharper.owin
+description
+    WebSharper Sitelets module for Owin 1.0
+tags
+    Web JavaScript F# C#
+files
+    ../HttpMultipartParser/bin/Release/net461/HttpMultipartParser.dll ==> lib/net461
+    ../WebSharper.Owin/bin/Release/net461/WebSharper.Owin.dll ==> lib/net461
+    ../WebSharper.Owin/bin/Release/net461/WebSharper.Owin.xml ==> lib/net461
+dependencies
+        WebSharper ~> LOCKEDVERSION/3
+        Owin ~> LOCKEDVERSION/3
+        Microsoft.Owin ~> LOCKEDVERSION/3
+frameworkAssemblies
+        System.Configuration

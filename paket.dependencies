@@ -1,0 +1,29 @@
+version 5.122.3
+source c:\Users\tarmil\localnuget
+source https://api.nuget.org/v3/index.json
+source https://nuget.intellifactory.com/nuget username: "%IF_USER%" password: "%IF_PASS%"
+
+storage: none
+
+nuget WebSharper alpha
+nuget WebSharper.FSharp alpha
+nuget Owin alpha
+nuget Microsoft.Owin alpha
+nuget WebSharper.Html alpha
+nuget Microsoft.Owin.Diagnostics 
+nuget Microsoft.Owin.FileSystems 
+nuget Microsoft.Owin.Host.HttpListener 
+nuget Microsoft.Owin.Hosting 
+nuget Microsoft.Owin.SelfHost 
+nuget Microsoft.Owin.StaticFiles 
+nuget FSharp.Core
+
+group build
+    framework: net45
+    source https://api.nuget.org/v3/index.json
+
+    nuget FAKE
+    nuget Paket.Core 5.122.3
+    github intellifactory/websharper tools/WebSharper.Fake.fsx
+    github intellifactory/websharper tools/WebSharper.Fake.cmd
+    github intellifactory/websharper tools/WebSharper.Fake.sh

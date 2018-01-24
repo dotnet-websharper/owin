@@ -6,3 +6,10 @@ obj/
 *.suo
 */Scripts/WebSharper/
 */Content/WebSharper/
+.vs/
+bin/
+obj/
+/.fake/
+/paket-files/
+/.vscode/
+nuget/*.paket.template

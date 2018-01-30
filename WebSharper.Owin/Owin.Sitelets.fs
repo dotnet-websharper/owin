@@ -168,6 +168,17 @@ module private Internal =
                     return refresh null
                 }
 
+    module H2W =
+        let FormDataFields (param: IDictionary<string, HttpMultipartParser.ParameterPart>) =
+            { new Http.ParameterCollection with
+                member this.Item(k) =
+                    match param.TryGetValue(k) with
+                    | true, v -> Some v.Data
+                    | false, _ -> None
+                member this.ToList() =
+                    [ for KeyValue(k, v) in param -> k, v.Data ]
+            }
+
     module O2W =
 
         let Method (m: string) : Http.Method =
@@ -190,22 +201,24 @@ module private Internal =
             }
 
         let Query (query: IReadableStringCollection) : Http.ParameterCollection =
-            Http.ParameterCollection(
-                seq {
-                    for KeyValue(k, vs) in query do
-                        for v in vs do
-                            yield (k, v)
-                }
-            )
+            { new Http.ParameterCollection with
+                member this.Item(k) = Option.ofObj query.[k]
+                member this.ToList() =
+                    [
+                        for KeyValue(k, vs) in query do
+                            for v in vs do
+                                yield (k, v)
+                    ]
+            }
 
-        let Cookies (cookies: RequestCookieCollection) : HttpCookieCollection =
-            let coll = HttpCookieCollection()
-            for KeyValue(k, v) in cookies do
-                coll.Add(HttpCookie(k, v))
-            coll
+        let Cookies (cookies: RequestCookieCollection) : Http.ParameterCollection =
+            { new Http.ParameterCollection with
+                member this.Item(k) = Option.ofObj cookies.[k]
+                member this.ToList() = [ for KeyValue(k, v) in cookies -> k, v ]
+            }
 
         let IsMultipart (req: IOwinRequest) =
-            req.ContentType <> null &&
+            not (isNull req.ContentType) &&
             req.ContentType.ToLowerInvariant().StartsWith "multipart/form-data"
 
         let DefaultCharset = System.Text.Encoding.GetEncoding("ISO-8859-1")
@@ -226,7 +239,7 @@ module private Internal =
             body.Seek(0L, SeekOrigin.Begin) |> ignore
             if IsMultipart req then
                 let parser = new MultipartFormDataParser(body, enc, leaveOpen = true)
-                let fields = [| for KeyValue(k, v) in parser.Parameters -> k, v.Data |]
+                let fields = H2W.FormDataFields parser.Parameters
                 let files =
                     [|
                         for f in parser.Files ->
@@ -243,16 +256,17 @@ module private Internal =
                                     use w = File.OpenWrite(filename)
                                     f.Data.CopyTo w }
                     |]
-                { Files = files; Fields = Http.ParameterCollection(fields); Body = body }
+                body.Seek(0L, SeekOrigin.Begin) |> ignore
+                { Files = files; Fields = fields; Body = body }
             else
                 use s = new StreamReader(body, enc, false, 1024, true)
                 let q = System.Web.HttpUtility.ParseQueryString(s.ReadToEnd())
-                { Files = []; Fields = Http.ParameterCollection(q); Body = body }
+                body.Seek(0L, SeekOrigin.Begin) |> ignore
+                { Files = []; Fields = Http.ParametersFromNameValues(q); Body = body }
 
         let Request (req: IOwinRequest) : Http.Request =
             EnvKey.GetOrSet<Http.Request> req.Environment EnvKey.WebSharper.Request <| fun _ ->
-            let formData = ParseFormData req
-            formData.Body.Seek(0L, SeekOrigin.Begin) |> ignore
+            let formData = lazy ParseFormData req
             let uri =
                 match req.PathBase.Value with
                 | "" | "/" -> req.Uri
@@ -264,15 +278,16 @@ module private Internal =
                         uB.Uri
                     else
                         req.Uri
-            {
-                Method = Method req.Method
-                Uri = uri
-                Headers = Headers req.Headers
-                Post = formData.Fields
-                Get = Query req.Query
-                ServerVariables = Http.ParameterCollection([])
-                Body = formData.Body
-                Files = formData.Files
+            { new Http.Request() with
+                member this.Method = Method req.Method
+                member this.Uri = uri
+                member this.Headers = Headers req.Headers
+                member this.Post = formData.Value.Fields
+                member this.Get = Query req.Query
+                member this.ServerVariables = Http.EmptyParameters
+                member this.Body = formData.Value.Body
+                member this.Files = formData.Value.Files
+                member this.Cookies = Cookies req.Cookies
             }
 
         let SetHttpContext (env: Env) (httpContext: HttpContext) : unit =

@@ -6,6 +6,9 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../build/AssemblyInfo.fs">
+      <Link>AssemblyInfo.fs</Link>
+    </Compile>
     <Compile Include="Owin.Sitelets.fsi" />
     <Compile Include="Owin.Sitelets.fs" />
   </ItemGroup>

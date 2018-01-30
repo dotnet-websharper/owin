@@ -1,7 +1,7 @@
 STORAGE: NONE
 NUGET
   remote: https://api.nuget.org/v3/index.json
-    FSharp.Core (4.3)
+    FSharp.Core (4.3.2)
       System.Collections (>= 4.0.11) - restriction: && (< net45) (>= netstandard1.6) (< netstandard2.0)
       System.Console (>= 4.0) - restriction: && (< net45) (>= netstandard1.6) (< netstandard2.0)
       System.Diagnostics.Debug (>= 4.0.11) - restriction: && (< net45) (>= netstandard1.6) (< netstandard2.0)
@@ -452,13 +452,13 @@ NUGET
       Microsoft.NETCore.Targets (>= 1.1) - restriction: || (>= dnxcore50) (&& (< monotouch) (< net451) (>= netstandard1.2) (< win81) (< wpa81) (< xamarinios) (< xamarinmac) (< xamarintvos) (< xamarinwatchos))
       System.Runtime (>= 4.3) - restriction: || (>= dnxcore50) (&& (< monotouch) (< net451) (>= netstandard1.2) (< win81) (< wpa81) (< xamarinios) (< xamarinmac) (< xamarintvos) (< xamarinwatchos))
   remote: https://nuget.intellifactory.com/nuget
-    WebSharper (4.2.0.190-alpha)
+    WebSharper (4.2.0.196-beta)
       Mono.Cecil (>= 0.10.0-beta6 < 0.11.0-beta)
-    WebSharper.FSharp (4.2.0.190-alpha)
-      WebSharper (4.2.0.190-alpha)
-    WebSharper.Html (4.2.0.101-alpha)
+    WebSharper.FSharp (4.2.0.196-beta)
+      WebSharper (4.2.0.196-beta)
+    WebSharper.Html (4.2.0.107-beta)
       IntelliFactory.Xml (>= 0.6.64 < 0.7)
-      WebSharper (>= 4.2.0-alpha < 4.3.0-alpha)
+      WebSharper (>= 4.2.0-beta < 4.3.0-beta)
 
 GROUP build
 RESTRICTION: == net45
@@ -482,4 +482,4 @@ GROUP wsbuild
 
 GIT
   remote: https://github.com/dotnet-websharper/build-script
-     (0ffbf6a797788d426225eda88d461940cb95be1d)
+     (fbeae129df10b0eb715e51634b4a00d9e45682f0)

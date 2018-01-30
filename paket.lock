@@ -452,11 +452,11 @@ NUGET
       Microsoft.NETCore.Targets (>= 1.1) - restriction: || (>= dnxcore50) (&& (< monotouch) (< net451) (>= netstandard1.2) (< win81) (< wpa81) (< xamarinios) (< xamarinmac) (< xamarintvos) (< xamarinwatchos))
       System.Runtime (>= 4.3) - restriction: || (>= dnxcore50) (&& (< monotouch) (< net451) (>= netstandard1.2) (< win81) (< wpa81) (< xamarinios) (< xamarinmac) (< xamarintvos) (< xamarinwatchos))
   remote: https://nuget.intellifactory.com/nuget
-    WebSharper (4.2.0.196-beta)
+    WebSharper (4.2.0.197-beta)
       Mono.Cecil (>= 0.10.0-beta6 < 0.11.0-beta)
-    WebSharper.FSharp (4.2.0.196-beta)
-      WebSharper (4.2.0.196-beta)
-    WebSharper.Html (4.2.0.107-beta)
+    WebSharper.FSharp (4.2.0.197-beta)
+      WebSharper (4.2.0.197-beta)
+    WebSharper.Html (4.2.0.108-beta)
       IntelliFactory.Xml (>= 0.6.64 < 0.7)
       WebSharper (>= 4.2.0-beta < 4.3.0-beta)
 
@@ -482,4 +482,4 @@ GROUP wsbuild
 
 GIT
   remote: https://github.com/dotnet-websharper/build-script
-     (84a0bc7bcde99d3c7e06f3cc5b053091edcca12e)
+     (7ede4511374aed54fbf6422506909f78949408b1)

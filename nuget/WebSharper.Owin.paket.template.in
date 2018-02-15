@@ -17,6 +17,6 @@ files
 dependencies
         WebSharper ~> LOCKEDVERSION/3
         Owin ~> LOCKEDVERSION/3
-        Microsoft.Owin ~> LOCKEDVERSION/3
+        Microsoft.Owin >= 3.0
 frameworkAssemblies
         System.Configuration

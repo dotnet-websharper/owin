@@ -6,15 +6,15 @@ storage: none
 
 nuget WebSharper prerelease
 nuget WebSharper.FSharp prerelease
-nuget Owin prerelease
-nuget Microsoft.Owin
 nuget WebSharper.Html prerelease
-nuget Microsoft.Owin.Diagnostics 
-nuget Microsoft.Owin.FileSystems 
-nuget Microsoft.Owin.Host.HttpListener 
-nuget Microsoft.Owin.Hosting 
-nuget Microsoft.Owin.SelfHost 
-nuget Microsoft.Owin.StaticFiles 
+nuget Owin
+nuget Microsoft.Owin 3.0.0
+nuget Microsoft.Owin.Diagnostics 3.0.0
+nuget Microsoft.Owin.FileSystems 3.0.0
+nuget Microsoft.Owin.Host.HttpListener 3.0.0
+nuget Microsoft.Owin.Hosting 3.0.0
+nuget Microsoft.Owin.SelfHost 3.0.0
+nuget Microsoft.Owin.StaticFiles 3.0.0
 nuget FSharp.Core
 
 group build

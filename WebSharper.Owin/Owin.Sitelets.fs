@@ -163,8 +163,13 @@ module private Internal =
 
             member this.Logout() =
                 async {
-                    ctx.Response.Cookies.Append(FormsAuthentication.FormsCookieName, "",
-                        CookieOptions(Expires = Nullable(DateTime.Now.AddDays(-1.))))
+                    ctx.Response.Cookies.Append(
+                        FormsAuthentication.FormsCookieName, "",
+                        CookieOptions(
+                            Expires = Nullable(DateTime.Now.AddDays(-1.)),
+                            Domain = FormsAuthentication.CookieDomain
+                        )
+                    )
                     return refresh null
                 }
 

@@ -349,6 +349,7 @@ module private Internal =
             {
                 DebuggingEnabled = isDebug
                 DefaultToHttp = false
+                ScriptBaseUrl = Some (pu.ScriptBasePath + "/")
                 GetSetting = fun (name: string) ->
                     match ConfigurationManager.AppSettings.[name] with
                     | null -> None

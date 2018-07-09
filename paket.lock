@@ -443,12 +443,12 @@ NUGET
       Microsoft.NETCore.Targets (>= 1.1) - restriction: || (>= dnxcore50) (&& (< monoandroid) (< monotouch) (< net451) (>= netstandard1.2) (< win81) (< wpa81) (< xamarinios) (< xamarinmac) (< xamarintvos) (< xamarinwatchos))
       System.Runtime (>= 4.3) - restriction: || (>= dnxcore50) (&& (< monoandroid) (< monotouch) (< net451) (>= netstandard1.2) (< win81) (< wpa81) (< xamarinios) (< xamarinmac) (< xamarintvos) (< xamarinwatchos))
   remote: https://nuget.intellifactory.com/nuget
-    WebSharper (4.3.0.274)
-    WebSharper.FSharp (4.3.0.274)
-      WebSharper (4.3.0.274)
-    WebSharper.Html (4.3.0.136)
+    WebSharper (4.4.0.277)
+    WebSharper.FSharp (4.4.0.277)
+      WebSharper (4.4.0.277)
+    WebSharper.Html (4.4.0.137)
       IntelliFactory.Xml (>= 0.6.64 < 0.7)
-      WebSharper (>= 4.3 < 4.4)
+      WebSharper (>= 4.4 < 4.5)
 
 GROUP build
 RESTRICTION: == net45
@@ -456,11 +456,11 @@ NUGET
   remote: https://api.nuget.org/v3/index.json
     Chessie (0.6)
       FSharp.Core
-    FAKE (4.64.6)
-    FSharp.Compiler.Tools (10.0.1)
-    FSharp.Core (4.3.4)
-    Mono.Cecil (0.10.0-beta7)
-    Newtonsoft.Json (11.0.1)
+    FAKE (5.1)
+    FSharp.Compiler.Tools (10.0.2)
+    FSharp.Core (4.5)
+    Mono.Cecil (0.10)
+    Newtonsoft.Json (11.0.2)
     Paket.Core (5.141)
       Chessie (>= 0.6)
       FSharp.Compiler.Tools

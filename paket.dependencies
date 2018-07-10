@@ -15,7 +15,7 @@ nuget Microsoft.Owin.Host.HttpListener 3.0.0
 nuget Microsoft.Owin.Hosting 3.0.0
 nuget Microsoft.Owin.SelfHost 3.0.0
 nuget Microsoft.Owin.StaticFiles 3.0.0
-nuget FSharp.Core
+nuget FSharp.Core ~> 4.2.0
 
 group build
     framework: net45

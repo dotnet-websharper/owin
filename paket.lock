@@ -455,12 +455,12 @@ NUGET
       Microsoft.NETCore.Targets (>= 1.1) - restriction: || (>= dnxcore50) (&& (< monoandroid) (< monotouch) (< net451) (>= netstandard1.2) (< win81) (< wpa81) (< xamarinios) (< xamarinmac) (< xamarintvos) (< xamarinwatchos))
       System.Runtime (>= 4.3) - restriction: || (>= dnxcore50) (&& (< monoandroid) (< monotouch) (< net451) (>= netstandard1.2) (< win81) (< wpa81) (< xamarinios) (< xamarinmac) (< xamarintvos) (< xamarinwatchos))
   remote: https://daily.websharper.com/nuget
-    WebSharper (4.5.1.304)
-    WebSharper.FSharp (4.5.1.304)
-      WebSharper (4.5.1.304)
-    WebSharper.Html (4.5.0.143)
+    WebSharper (4.5.2.308)
+    WebSharper.FSharp (4.5.2.308)
+      WebSharper (4.5.2.308)
+    WebSharper.Html (4.5.0.146)
       IntelliFactory.Xml (>= 0.6.64 < 0.7)
-      WebSharper (>= 4.5.1 < 4.6)
+      WebSharper (>= 4.5.2 < 4.6)
 
 GROUP build
 RESTRICTION: == net45

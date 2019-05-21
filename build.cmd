@@ -1,7 +1,6 @@
 @echo off
 setlocal
 
-.paket\paket.exe restore
 dotnet restore
 if errorlevel 1 exit /b %errorlevel%
 

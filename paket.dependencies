@@ -1,4 +1,4 @@
-version 5.203.0
+version 5.207.2
 source https://api.nuget.org/v3/index.json
 source https://daily.websharper.com/nuget
 
@@ -29,7 +29,7 @@ group build
     nuget Fake.DotNet.MSBuild
     nuget Fake.DotNet.Paket
     nuget Fake.Tools.Git
-    nuget Paket.Core 5.203.0
+    nuget Paket.Core 5.207.2
 
 group wsbuild
     git https://github.com/dotnet-websharper/build-script fake5

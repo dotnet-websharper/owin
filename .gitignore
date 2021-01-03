@@ -12,7 +12,6 @@ obj/
 /.fake/
 /paket-files/
 /.vscode/
-nuget/*.paket.template
 .paket/.store/
 .paket/*.exe
 .paket/paket

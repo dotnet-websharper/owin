@@ -15,8 +15,8 @@ files
     ../WebSharper.Owin/bin/Release/net461/WebSharper.Owin.dll ==> lib/net461
     ../WebSharper.Owin/bin/Release/net461/WebSharper.Owin.xml ==> lib/net461
 dependencies
-        WebSharper ~> LOCKEDVERSION/3
-        Owin ~> LOCKEDVERSION/3
+        WebSharper ~> LOCKEDVERSION:[3]
+        Owin ~> LOCKEDVERSION:[3]
         Microsoft.Owin >= 3.0
 frameworkAssemblies
         System.Configuration

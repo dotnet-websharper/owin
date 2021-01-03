@@ -1,12 +1,11 @@
-version 5.230.0
 source https://api.nuget.org/v3/index.json
 source https://daily.websharper.com/nuget
 
 storage: none
 
-nuget WebSharper prerelease
-nuget WebSharper.FSharp prerelease
-nuget WebSharper.Html prerelease
+nuget WebSharper ~> 4.7
+nuget WebSharper.FSharp ~> 4.7
+nuget WebSharper.Html ~> 4.7
 nuget Owin
 nuget Microsoft.Owin 3.0.0
 nuget Microsoft.Owin.Diagnostics 3.0.0
@@ -17,19 +16,5 @@ nuget Microsoft.Owin.SelfHost 3.0.0
 nuget Microsoft.Owin.StaticFiles 3.0.0
 nuget FSharp.Core ~> 4.2.0
 
-group build
-    framework: netstandard2.0
-    source https://api.nuget.org/v3/index.json
-
-	nuget Fake.Core.CommandLineParsing
-    nuget Fake.Core.Target
-    nuget Fake.IO.FileSystem
-    nuget Fake.DotNet.AssemblyInfoFile
-    nuget Fake.DotNet.Cli
-    nuget Fake.DotNet.MSBuild
-    nuget Fake.DotNet.Paket
-    nuget Fake.Tools.Git
-    nuget Paket.Core 5.230.0
-
 group wsbuild
-    git https://github.com/dotnet-websharper/build-script fake5
+    git https://github.com/dotnet-websharper/build-script dotnettool

@@ -420,13 +420,13 @@ NUGET
       Microsoft.NETCore.Targets (>= 1.0.1) - restriction: && (< monoandroid) (< monotouch) (< net451) (>= netstandard1.2) (< win81) (< wpa81) (< xamarinios) (< xamarinmac) (< xamarintvos) (< xamarinwatchos)
       System.Runtime (>= 4.1) - restriction: && (< monoandroid) (< monotouch) (< net451) (>= netstandard1.2) (< win81) (< wpa81) (< xamarinios) (< xamarinmac) (< xamarintvos) (< xamarinwatchos)
   remote: https://daily.websharper.com/nuget
-    WebSharper (4.7.1.426)
+    WebSharper (4.7.2.444)
       FSharp.Core (>= 4.2.3)
       System.Reflection.Emit.Lightweight (>= 4.3)
-    WebSharper.FSharp (4.7.1.426)
-      WebSharper (4.7.1.426)
-    WebSharper.Html (4.7.1.194)
-      WebSharper (>= 4.7.1 < 4.8)
+    WebSharper.FSharp (4.7.2.444)
+      WebSharper (4.7.2.444)
+    WebSharper.Html (4.7.1.197)
+      WebSharper (>= 4.7.2 < 4.8)
 
 GROUP wsbuild
 

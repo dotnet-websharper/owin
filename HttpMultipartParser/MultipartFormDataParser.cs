@@ -467,6 +467,9 @@ namespace HttpMultipartParser
             var prevBuffer = new byte[this.BinaryBufferSize];
             int curLength = 0;
             int prevLength = 0;
+            // Patch from code crash in the future, in a situation where the size of fullBuffer is exactly equal 
+            // to the size of the last data block + endBoundaryBinary. This is a very rare, but very unfortunate case.
+            const int SAVE_GAP = 0x100; //fix:20230616
 
             prevLength = reader.Read(prevBuffer, 0, prevBuffer.Length);
             do
@@ -475,7 +478,7 @@ namespace HttpMultipartParser
 
                 // Combine both buffers into the fullBuffer
                 // See: http://stackoverflow.com/questions/415291/best-way-to-combine-two-or-more-byte-arrays-in-c-sharp
-                var fullBuffer = new byte[this.BinaryBufferSize * 2];
+                var fullBuffer = new byte[this.BinaryBufferSize * 2 + SAVE_GAP]; //fix:20230616
                 Buffer.BlockCopy(prevBuffer, 0, fullBuffer, 0, prevLength);
                 Buffer.BlockCopy(curBuffer, 0, fullBuffer, prevLength, curLength);
 

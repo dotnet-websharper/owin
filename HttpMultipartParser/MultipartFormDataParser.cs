@@ -511,7 +511,10 @@ namespace HttpMultipartParser
                 else if (boundaryPos >= 0 && endBoundaryPos < 0)
                 {
                     // Select boundary    
-                    endPos = boundaryPos;
+                    //fix:20230617:b
+                    //endPos = boundaryPos;
+                    endPos = -1;
+                    //fix:20230617:e
                     endPosLength = boundaryLength;
                 }
                 else if (boundaryPos < 0 && endBoundaryPos >= 0)
